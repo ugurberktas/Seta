@@ -1,0 +1,41 @@
+[
+  {
+    "id": "latvia_sdc_2023",
+    "country": "Latvia",
+    "title": "The State Defence Concept 2023-2027",
+    "year": 2023,
+    "language": "English",
+    "document_type": "State Defence Concept",
+    "filename": "latvia_state_defence_concept_2023_2027.pdf",
+    "source_page_url": "https://www.mod.gov.lv/lv/state-defence-concept",
+    "pdf_url": "https://www.mod.gov.lv/sites/mod/files/document/The%20State%20Defence%20Concept%202023-2027.pdf",
+    "expected_pages": 19,
+    "download_status": "verified"
+  },
+  {
+    "id": "uk_sdr_2025",
+    "country": "United Kingdom",
+    "title": "The Strategic Defence Review 2025 - Making Britain Safer: secure at home, strong abroad",
+    "year": 2025,
+    "language": "English",
+    "document_type": "Strategic Defence Review",
+    "filename": "uk_strategic_defence_review_2025.pdf",
+    "source_page_url": "https://www.gov.uk/government/publications/the-strategic-defence-review-2025-making-britain-safer-secure-at-home-strong-abroad",
+    "pdf_url": "https://assets.publishing.service.gov.uk/media/683d89f181deb72cce2680a5/The_Strategic_Defence_Review_2025_-_Making_Britain_Safer_-_secure_at_home__strong_abroad.pdf",
+    "expected_pages": 144,
+    "download_status": "verified"
+  },
+  {
+    "id": "netherlands_dwp_2024",
+    "country": "Netherlands",
+    "title": "Defence White Paper 2024 - Strong, Smart and Together",
+    "year": 2024,
+    "language": "English",
+    "document_type": "Defence White Paper",
+    "filename": "netherlands_defence_white_paper_2024.pdf",
+    "source_page_url": "https://english.defensie.nl/latest/news/2024/09/05/defence-white-paper-2024-strong-smart-together",
+    "pdf_url": "https://english.defensie.nl/site/binaries/site-content/collections/documents/2024/09/05/defence-white-paper-2024/NLD%2BDefence%2Bwhite%2Bpaper.pdf",
+    "download_status": "pending",
+    "download_note": "Official 2024 Defence White Paper source confirmed, but current direct PDF endpoint is unavailable/returns 404. Manual recovery required."
+  }
+]

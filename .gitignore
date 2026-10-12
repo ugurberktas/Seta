@@ -25,6 +25,10 @@ htmlcov/
 # Streamlit
 .streamlit/
 
+# Raw data — PDFs are not committed (large files)
+data/raw/*.pdf
+!data/raw/.gitkeep
+
 # Processed data (keep folder via .gitkeep)
 data/processed/*
 !data/processed/.gitkeep
