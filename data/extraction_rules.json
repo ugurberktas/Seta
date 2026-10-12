@@ -1,0 +1,41 @@
+{
+  "latvia_sdc_2023": {
+    "total_pdf_pages_expected": 19,
+    "page_number_printed_offset": 0,
+    "pages": {
+      "cover": [1],
+      "table_of_contents": [2],
+      "core_body_ranges": [[3, 19]],
+      "foreword": [],
+      "section_dividers": [],
+      "appendices": [],
+      "blank_pages": []
+    },
+    "default_analysis_scope": "core_body"
+  },
+
+  "uk_sdr_2025": {
+    "total_pdf_pages_expected": 144,
+    "page_number_printed_offset": -3,
+    "pages": {
+      "cover": [1, 2],
+      "publication_metadata": [3],
+      "table_of_contents": [4],
+      "foreword_ranges": [[5, 10], [12, 13]],
+      "section_dividers": [11, 14, 28, 38, 45, 75, 89, 97],
+      "core_body_ranges": [[15, 140]],
+      "appendices": [141, 142, 143],
+      "blank_pages": [144],
+      "visual_heavy_pages": [35, 62, 83]
+    },
+    "default_analysis_scope": "core_body",
+    "available_analysis_scopes": {
+      "core_body": {
+        "include": ["core_body"]
+      },
+      "extended_body": {
+        "include": ["foreword", "core_body"]
+      }
+    }
+  }
+}
