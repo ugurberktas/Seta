@@ -32,3 +32,7 @@ data/raw/*.pdf
 # Processed data (keep folder via .gitkeep)
 data/processed/*
 !data/processed/.gitkeep
+
+# Runtime review decisions (keep folder via .gitkeep)
+data/reviews/*.json
+!data/reviews/.gitkeep
