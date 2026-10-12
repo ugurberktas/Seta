@@ -1,0 +1,334 @@
+{
+  "version": 1,
+  "methodology": {
+    "name": "compact_english_dictionary_baseline",
+    "case_insensitive_default": true,
+    "overlap_policy": "longest_non_overlapping_match",
+    "frequency_unit_words": 1000,
+    "note": "PoC baseline reproducing the category mention frequency per 1000 words concept from the SETA European Security Architecture report using a compact, explainable English dictionary. Not the original multilingual SETA dictionary."
+  },
+  "categories": {
+    "Russia": {
+      "display_name": "Russia",
+      "description": "Mentions of Russia as a primary state actor, adversary, and geopolitical threat.",
+      "exclude_patterns": [],
+      "patterns": [
+        {
+          "id": "russian_federation",
+          "regex": "\\brussian\\s+federation\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Official country name."
+        },
+        {
+          "id": "russia",
+          "regex": "\\brussia(?:['’]s)?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Country name with optional possessive."
+        },
+        {
+          "id": "russian",
+          "regex": "\\brussian\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Demonym and adjective."
+        },
+        {
+          "id": "kremlin",
+          "regex": "\\bkremlin\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Metonym for the Russian government leadership."
+        },
+        {
+          "id": "moscow",
+          "regex": "\\bmoscow\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": false,
+          "requires_review": true,
+          "note": "Geographic/political ambiguity; surfaced for review but excluded from raw baseline."
+        }
+      ]
+    },
+    "China": {
+      "display_name": "China",
+      "description": "Mentions of China as a systemic challenge, competitor, and global actor.",
+      "exclude_patterns": [],
+      "patterns": [
+        {
+          "id": "china",
+          "regex": "\\bchina(?:['’]s)?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Country name with optional possessive."
+        },
+        {
+          "id": "chinese",
+          "regex": "\\bchinese\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Demonym and adjective."
+        },
+        {
+          "id": "beijing",
+          "regex": "\\bbeijing\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Metonym for Chinese state leadership; subject to contextual review."
+        }
+      ]
+    },
+    "Hybrid": {
+      "display_name": "Hybrid",
+      "description": "Sub-threshold, asymmetric, and multi-domain hybrid warfare and threats.",
+      "exclude_patterns": [
+        "\\bhybrid\\s+working\\b",
+        "\\bhybrid[’'\"]?\\s+carrier\\b",
+        "\\bhybrid\\s+workforce\\b"
+      ],
+      "patterns": [
+        {
+          "id": "hybrid_threat",
+          "regex": "\\bhybrid\\s+threats?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Explicit hybrid threat phrase."
+        },
+        {
+          "id": "hybrid_warfare",
+          "regex": "\\bhybrid\\s+warfare\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Doctrinal hybrid conflict phrase."
+        },
+        {
+          "id": "hybrid_conflict",
+          "regex": "\\bhybrid\\s+conflicts?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Conflict descriptor."
+        },
+        {
+          "id": "hybrid_attack",
+          "regex": "\\bhybrid\\s+attacks?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Direct hostile action phrase."
+        },
+        {
+          "id": "hybrid_operation",
+          "regex": "\\bhybrid\\s+operations?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Operational phrase."
+        },
+        {
+          "id": "hybrid_general",
+          "regex": "\\bhybrid\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Standalone hybrid mention; filtered by exclusion patterns and subject to review."
+        }
+      ]
+    },
+    "Cyber": {
+      "display_name": "Cyber",
+      "description": "Hostile cyber activities, operations, and the cyber operational domain.",
+      "exclude_patterns": [],
+      "patterns": [
+        {
+          "id": "cyber_attack_phrase",
+          "regex": "\\bcyber[- ]attacks?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Spaced or hyphenated cyber attack."
+        },
+        {
+          "id": "cyberattack_compound",
+          "regex": "\\bcyberattacks?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Closed compound cyberattack."
+        },
+        {
+          "id": "cyber_threat",
+          "regex": "\\bcyber[- ]threats?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Explicit cyber threat phrase."
+        },
+        {
+          "id": "cyber_risk",
+          "regex": "\\bcyber[- ]risks?\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Cyber risk phrase."
+        },
+        {
+          "id": "cyber_warfare",
+          "regex": "\\bcyber[- ]warfare\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Doctrinal cyber conflict phrase."
+        },
+        {
+          "id": "cyber_espionage",
+          "regex": "\\bcyber[- ]espionage\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Hostile cyber intelligence gathering."
+        },
+        {
+          "id": "cyber_general",
+          "regex": "\\bcyber\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Broad standalone or prefix mention of cyber domain."
+        },
+        {
+          "id": "cyberspace",
+          "regex": "\\bcyberspace\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Operational cyber domain."
+        },
+        {
+          "id": "cybersecurity",
+          "regex": "\\bcybersecurity\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Closed compound cybersecurity."
+        },
+        {
+          "id": "cyber_security",
+          "regex": "\\bcyber\\s+security\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Two-word cyber security."
+        },
+        {
+          "id": "cyber_defence",
+          "regex": "\\bcyber\\s+defence\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "UK/EU spelling of defensive cyber concept."
+        },
+        {
+          "id": "cyber_defense",
+          "regex": "\\bcyber\\s+defense\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "US spelling of defensive cyber concept."
+        },
+        {
+          "id": "cyberem",
+          "regex": "\\bcyberem\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "UK Cyber and Electromagnetic Domain terminology."
+        }
+      ]
+    },
+    "Migration": {
+      "display_name": "Migration",
+      "description": "Instrumentalized migration, demographic instability, and border pressures.",
+      "exclude_patterns": [
+        "\\bdata\\s+migration\\b",
+        "\\bcloud\\s+migration\\b"
+      ],
+      "patterns": [
+        {
+          "id": "weaponized_migration",
+          "regex": "\\bweaponized\\s+migration\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Deliberate hostile instrumentalization of migrant flows."
+        },
+        {
+          "id": "instrumentalized_migration",
+          "regex": "\\binstrumentalized\\s+migration\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Doctrinal term for state-sponsored migration pressure."
+        },
+        {
+          "id": "illegal_migration",
+          "regex": "\\billegal\\s+migration\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Border security and irregular migration."
+        },
+        {
+          "id": "mass_migration",
+          "regex": "\\bmass\\s+migration\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Large-scale demographic dislocation."
+        },
+        {
+          "id": "migration_crisis",
+          "regex": "\\bmigration\\s+crisis\\b",
+          "tier": "core",
+          "count_in_raw_baseline": true,
+          "requires_review": false,
+          "note": "Acute border or humanitarian pressure."
+        },
+        {
+          "id": "migration_general",
+          "regex": "\\bmigration\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "General migration phenomenon; flagged for review."
+        },
+        {
+          "id": "migrant",
+          "regex": "\\bmigrants?\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Individual demographic actor."
+        },
+        {
+          "id": "refugee",
+          "regex": "\\brefugees?\\b",
+          "tier": "context_sensitive",
+          "count_in_raw_baseline": true,
+          "requires_review": true,
+          "note": "Displaced persons / humanitarian term."
+        }
+      ]
+    }
+  }
+}
