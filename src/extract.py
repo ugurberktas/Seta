@@ -55,37 +55,45 @@ def parse_page_sets(page_rules: dict) -> dict[str, set[int]]:
     """Parse all page sets from the page rules dictionary."""
     return {
         "cover": expand_page_specs(page_rules.get("cover", [])),
+        "back_cover": expand_page_specs(page_rules.get("back_cover", [])),
         "publication_metadata": expand_page_specs(page_rules.get("publication_metadata", [])),
         "table_of_contents": expand_page_specs(page_rules.get("table_of_contents", [])),
+        "front_matter": expand_page_specs(page_rules.get("front_matter", [])),
         "section_dividers": expand_page_specs(page_rules.get("section_dividers", [])),
         "appendices": expand_page_specs(page_rules.get("appendices", [])),
         "blank_pages": expand_page_specs(page_rules.get("blank_pages", [])),
+        "visual_only": expand_page_specs(page_rules.get("visual_only", [])),
         "foreword": expand_page_specs(page_rules.get("foreword", [])) | expand_page_specs(page_rules.get("foreword_ranges", [])),
         "core_body": expand_page_specs(page_rules.get("core_body", [])) | expand_page_specs(page_rules.get("core_body_ranges", [])),
-        "visual_heavy": expand_page_specs(page_rules.get("visual_heavy_pages", []))
+        "visual_heavy": expand_page_specs(page_rules.get("visual_heavy", [])) | expand_page_specs(page_rules.get("visual_heavy_pages", []))
     }
 
 
 def classify_page(page_num: int, page_sets: dict[str, set[int]]) -> tuple[str, bool]:
     """
     Classifies a 1-based PDF page into a section_type and visual_heavy flag.
-    Priority rule: section_divider wins over core_body.
+    Explicit exclusion types win over core_body.
     """
     is_visual_heavy = page_num in page_sets["visual_heavy"]
 
     if page_num in page_sets["blank_pages"]:
         return "blank_page", is_visual_heavy
+    if page_num in page_sets["visual_only"]:
+        return "visual_only", is_visual_heavy
+    if page_num in page_sets["section_dividers"]:
+        return "section_divider", is_visual_heavy
+    if page_num in page_sets["appendices"]:
+        return "appendix", is_visual_heavy
+    if page_num in page_sets["front_matter"]:
+        return "front_matter", is_visual_heavy
+    if page_num in page_sets["back_cover"]:
+        return "back_cover", is_visual_heavy
     if page_num in page_sets["cover"]:
         return "cover", is_visual_heavy
     if page_num in page_sets["publication_metadata"]:
         return "publication_metadata", is_visual_heavy
     if page_num in page_sets["table_of_contents"]:
         return "table_of_contents", is_visual_heavy
-    if page_num in page_sets["section_dividers"]:
-        # Section divider wins even if in core_body range
-        return "section_divider", is_visual_heavy
-    if page_num in page_sets["appendices"]:
-        return "appendix", is_visual_heavy
     if page_num in page_sets["foreword"]:
         return "foreword", is_visual_heavy
     if page_num in page_sets["core_body"]:
@@ -155,6 +163,69 @@ def clean_uk_footer(text: str, page_number_printed: int | None) -> str:
     return text
 
 
+NETHERLANDS_RUNNING_HEADERS = {
+    "1. SECURITY ENVIRONMENT",
+    "2. TASKS AND OBJECTIVES",
+    "3. STRATEGIC COURSE FOR STRENGTHENING DEFENCE",
+    "4. COMBAT POWER",
+    "5. PEOPLE",
+    "6. MATERIEL",
+    "7. PRECONDITIONS",
+}
+NETHERLANDS_RUNNING_FOOTER = "DEFENCE WHITE PAPER | 2024"
+
+
+def clean_netherlands_page(text: str, page_num_pdf: int) -> str:
+    """
+    Remove only the confirmed trailing running-header/footer block.
+
+    Each Netherlands PDF page is a two-page printed spread. The cleaner
+    considers only the final ten non-empty lines, requires the exact running
+    footer to be present there, and removes a contiguous suffix containing:
+    - exact known chapter running headers,
+    - the exact running footer, and
+    - the two folio numbers structurally associated with that PDF spread.
+
+    Body text and standalone numbers elsewhere are preserved.
+    """
+    if not text:
+        return ""
+
+    lines = text.split("\n")
+    non_empty_indices = [i for i, line in enumerate(lines) if line.strip()]
+    if not non_empty_indices:
+        return text
+
+    def normalized_line(index: int) -> str:
+        return re.sub(r"\s+", " ", lines[index]).strip()
+
+    tail_indices = non_empty_indices[-10:]
+    if NETHERLANDS_RUNNING_FOOTER not in {
+        normalized_line(i) for i in tail_indices
+    }:
+        return text
+
+    expected_folios = {
+        str((2 * page_num_pdf) - 2),
+        str((2 * page_num_pdf) - 1),
+    }
+    removable_lines = (
+        NETHERLANDS_RUNNING_HEADERS
+        | {NETHERLANDS_RUNNING_FOOTER}
+        | expected_folios
+    )
+
+    remove_indices = set()
+    for index in reversed(non_empty_indices):
+        if normalized_line(index) not in removable_lines:
+            break
+        remove_indices.add(index)
+
+    return "\n".join(
+        line for index, line in enumerate(lines) if index not in remove_indices
+    )
+
+
 def repair_hyphenated_line_breaks(text: str) -> str:
     """
     Repairs safe hyphenated line-breaks:
@@ -211,6 +282,8 @@ def clean_page_text(raw_text: str, doc_id: str, page_num_pdf: int, page_number_p
         text = clean_latvia_header(text, page_num_pdf)
     elif doc_id == "uk_sdr_2025":
         text = clean_uk_footer(text, page_number_printed)
+    elif doc_id == "netherlands_dwp_2024":
+        text = clean_netherlands_page(text, page_num_pdf)
 
     # 2. Non-breaking space replacement (\u00a0 -> space)
     text = text.replace("\u00a0", " ")
@@ -239,7 +312,18 @@ def determine_inclusion_and_reason(section_type: str, scope: str) -> tuple[bool,
     Determine if a page is included in analysis and the exclusion reason if not.
     """
     # Non-body pages are always excluded
-    if section_type in ("cover", "publication_metadata", "table_of_contents", "section_divider", "appendix", "blank_page", "other"):
+    if section_type in (
+        "cover",
+        "back_cover",
+        "publication_metadata",
+        "table_of_contents",
+        "front_matter",
+        "visual_only",
+        "section_divider",
+        "appendix",
+        "blank_page",
+        "other",
+    ):
         return False, section_type
 
     if scope == "core_body":
@@ -260,6 +344,12 @@ def extract_document(doc_meta: dict, doc_rules: dict, scope: str, raw_pdf_path: 
     Extracts pages from a single verified document and writes the processed JSON output.
     """
     expected_pages = doc_rules.get("total_pdf_pages_expected")
+    printed_page_mode = doc_rules.get("page_number_printed_mode", "offset")
+    if printed_page_mode not in ("offset", "none"):
+        raise ValueError(
+            "Unsupported page_number_printed_mode "
+            f"'{printed_page_mode}'. Allowed values: offset, none"
+        )
     offset = doc_rules.get("page_number_printed_offset", 0)
     page_sets = parse_page_sets(doc_rules.get("pages", {}))
 
@@ -285,7 +375,9 @@ def extract_document(doc_meta: dict, doc_rules: dict, scope: str, raw_pdf_path: 
         include_in_analysis, exclusion_reason = determine_inclusion_and_reason(section_type, scope)
 
         # Printed page number computation
-        if section_type in ("cover", "publication_metadata", "table_of_contents", "blank_page"):
+        if printed_page_mode == "none":
+            page_number_printed = None
+        elif section_type in ("cover", "publication_metadata", "table_of_contents", "blank_page"):
             page_number_printed = None
         else:
             calc_printed = page_num_pdf + offset

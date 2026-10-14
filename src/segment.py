@@ -15,6 +15,12 @@ import sys
 from pathlib import Path
 
 
+NETHERLANDS_DOCUMENT_ID = "netherlands_dwp_2024"
+NETHERLANDS_MAX_SEGMENT_WORDS = 450
+NETHERLANDS_FALLBACK_TARGET_WORDS = 300
+NETHERLANDS_FALLBACK_PREFERRED_MAX_WORDS = 400
+
+
 def load_json(file_path: Path) -> dict:
     """Load JSON file."""
     if not file_path.exists():
@@ -57,7 +63,77 @@ def is_heading(line: str) -> bool:
     return False
 
 
-def detect_boundary_type(line: str) -> str | None:
+def is_netherlands_decimal_heading(line: str) -> bool:
+    """Detect short Netherlands section headings such as '4.2' or '4.2 Title'."""
+    stripped = line.strip()
+    if len(stripped.split()) > 15:
+        return False
+    return bool(re.match(r"^\d+\.\d+(?:\.\d+)?(?:\s+\S.*)?$", stripped))
+
+
+def is_netherlands_title_case_heading(
+    line: str,
+    previous_line: str | None = None,
+    next_line: str | None = None,
+) -> bool:
+    """Detect conservative short sentence-case headings in the Netherlands source."""
+    stripped = line.strip()
+    words = stripped.split()
+    if not stripped or len(words) > 8 or len(stripped) > 80:
+        return False
+    if stripped.endswith((".", "!", "?", ":", ";", ",")):
+        return False
+    if re.match(r"^(?:[•\-*]|>\s*\x07?)\s*", stripped):
+        return False
+    if re.match(r"^\d", stripped):
+        return False
+
+    alpha_words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[-'][A-Za-zÀ-ÖØ-öø-ÿ]+)*", stripped)
+    if not alpha_words:
+        return False
+
+    # Wrapped prose commonly contains these verbs; rejecting them prevents
+    # ordinary short source lines from becoming headings.
+    prose_verbs = {
+        "am", "are", "be", "been", "being", "can", "could", "did", "do",
+        "does", "has", "have", "intends", "is", "must", "need", "needs",
+        "should", "was", "were", "will", "would",
+    }
+    if any(word.lower() in prose_verbs for word in alpha_words):
+        return False
+
+    insignificant_words = {
+        "a", "an", "and", "at", "by", "for", "from", "in", "of", "on",
+        "or", "the", "to", "with",
+    }
+    significant_words = [
+        word for word in alpha_words if word.lower() not in insignificant_words
+    ]
+    if not significant_words:
+        return False
+
+    if not significant_words[0][0].isupper():
+        return False
+
+    if previous_line is not None:
+        previous = previous_line.strip()
+        previous_ends_sentence = bool(re.search(r"[.!?][\"')\]]*\d*$", previous))
+        if not previous_ends_sentence and not is_netherlands_decimal_heading(previous):
+            return False
+
+    if next_line is None or not re.match(r"^[\"'(]*[A-ZÀ-ÖØ-Þ]", next_line.strip()):
+        return False
+
+    capitalized = sum(word[0].isupper() for word in significant_words)
+    return capitalized * 2 >= len(significant_words)
+
+
+def detect_boundary_type(
+    line: str,
+    document_id: str | None = None,
+    previous_line: str | None = None,
+    next_line: str | None = None,
+) -> str | None:
     """
     Detects if a non-empty line starts a new segment boundary.
     Returns: 'heading', 'numbered_paragraph', 'bullet_item', or None.
@@ -69,6 +145,14 @@ def detect_boundary_type(line: str) -> str | None:
     # 1. Heading check
     if is_heading(stripped):
         return "heading"
+
+    if document_id == NETHERLANDS_DOCUMENT_ID:
+        if is_netherlands_decimal_heading(stripped):
+            return "heading"
+        if is_netherlands_title_case_heading(stripped, previous_line, next_line):
+            return "heading"
+        if re.match(r"^>\s*\x07", stripped):
+            return "bullet_item"
 
     # 2. Numbered paragraph patterns:
     # A) Single number line: "1." or "7"
@@ -90,6 +174,103 @@ def detect_boundary_type(line: str) -> str | None:
     return None
 
 
+def normalize_segment_text(lines: list[str]) -> str:
+    """Join source lines using the same normalization as regular segments."""
+    text = " ".join(line.strip() for line in lines if line.strip())
+    return re.sub(r"[ \t]+", " ", text).strip()
+
+
+def split_netherlands_oversized_segment(segment: dict, page_lines: list[str]) -> list[dict]:
+    """Split an oversized Netherlands segment at deterministic source-line boundaries."""
+    if segment["word_count"] <= NETHERLANDS_MAX_SEGMENT_WORDS:
+        return [segment]
+
+    line_entries = [
+        (line_number, page_lines[line_number - 1].strip())
+        for line_number in range(segment["source_line_start"], segment["source_line_end"] + 1)
+        if page_lines[line_number - 1].strip()
+    ]
+    chunks = []
+    start_index = 0
+
+    while start_index < len(line_entries):
+        remaining_entries = line_entries[start_index:]
+        remaining_words = sum(len(line.split()) for _, line in remaining_entries)
+        if remaining_words <= NETHERLANDS_FALLBACK_PREFERRED_MAX_WORDS:
+            chunks.append(remaining_entries)
+            break
+
+        candidates = []
+        cumulative_words = 0
+        for relative_index, (_, line) in enumerate(remaining_entries[:-1]):
+            cumulative_words += len(line.split())
+            trailing_words = remaining_words - cumulative_words
+            if cumulative_words < 200 or trailing_words < 120:
+                continue
+            if cumulative_words > NETHERLANDS_FALLBACK_PREFERRED_MAX_WORDS:
+                break
+            ends_sentence = line.rstrip().endswith((".", "!", "?"))
+            candidates.append((not ends_sentence, abs(cumulative_words - NETHERLANDS_FALLBACK_TARGET_WORDS), relative_index))
+
+        if candidates:
+            _, _, split_relative_index = min(candidates)
+        else:
+            cumulative_words = 0
+            safe_candidates = []
+            for relative_index, (_, line) in enumerate(remaining_entries[:-1]):
+                cumulative_words += len(line.split())
+                trailing_words = remaining_words - cumulative_words
+                if cumulative_words >= 150 and trailing_words >= 100:
+                    safe_candidates.append((abs(cumulative_words - NETHERLANDS_FALLBACK_TARGET_WORDS), relative_index))
+                if cumulative_words >= NETHERLANDS_FALLBACK_PREFERRED_MAX_WORDS:
+                    break
+            if not safe_candidates:
+                chunks.append(remaining_entries)
+                break
+            _, split_relative_index = min(safe_candidates)
+
+        split_index = start_index + split_relative_index + 1
+        chunks.append(line_entries[start_index:split_index])
+        start_index = split_index
+
+    split_segments = []
+    fallback_type = segment["segment_type"]
+    if fallback_type in {"heading", "bullet_item"}:
+        fallback_type = "paragraph"
+
+    for chunk in chunks:
+        chunk_text = normalize_segment_text([line for _, line in chunk])
+        split_segment = dict(segment)
+        split_segment.update({
+            "segment_type": fallback_type,
+            "source_line_start": chunk[0][0],
+            "source_line_end": chunk[-1][0],
+            "text": chunk_text,
+            "word_count": len(chunk_text.split()),
+            "char_count": len(chunk_text),
+        })
+        split_segments.append(split_segment)
+
+    return split_segments
+
+
+def finalize_page_segments(page_data: dict, segments: list[dict], page_lines: list[str]) -> list[dict]:
+    """Apply document-specific fallback splitting and assign final deterministic IDs."""
+    if page_data["document_id"] == NETHERLANDS_DOCUMENT_ID:
+        finalized = []
+        for segment in segments:
+            finalized.extend(split_netherlands_oversized_segment(segment, page_lines))
+    else:
+        finalized = segments
+
+    for segment_index, segment in enumerate(finalized, start=1):
+        segment["segment_index"] = segment_index
+        segment["segment_id"] = (
+            f"{page_data['document_id']}_p{page_data['page_number_pdf']:03d}_s{segment_index:03d}"
+        )
+    return finalized
+
+
 def segment_page(page_data: dict) -> list[dict]:
     """
     Segments a single page's cleaned_text into traceable passages.
@@ -106,15 +287,14 @@ def segment_page(page_data: dict) -> list[dict]:
     current_segment_type = None
     current_line_start = None
     current_line_end = None
+    previous_nonempty_line = None
 
     def flush_segment():
         nonlocal current_segment_lines, current_segment_type, current_line_start, current_line_end
         if not current_segment_lines:
             return
 
-        text = " ".join(line.strip() for line in current_segment_lines if line.strip())
-        # Clean any accidental extra internal spaces
-        text = re.sub(r"[ \t]+", " ", text).strip()
+        text = normalize_segment_text(current_segment_lines)
 
         if text:
             seg_idx = len(segments) + 1
@@ -146,7 +326,16 @@ def segment_page(page_data: dict) -> list[dict]:
         if not stripped:
             continue
 
-        boundary = detect_boundary_type(stripped)
+        next_nonempty_line = next(
+            (candidate.strip() for candidate in lines[idx + 1:] if candidate.strip()),
+            None,
+        )
+        boundary = detect_boundary_type(
+            stripped,
+            page_data["document_id"],
+            previous_nonempty_line,
+            next_nonempty_line,
+        )
 
         if boundary is not None:
             # New boundary detected; flush previous segment
@@ -166,8 +355,10 @@ def segment_page(page_data: dict) -> list[dict]:
                 current_segment_lines.append(stripped)
                 current_line_end = line_num
 
+        previous_nonempty_line = stripped
+
     flush_segment()
-    return segments
+    return finalize_page_segments(page_data, segments, lines)
 
 
 def segment_document(doc_data: dict, input_path: Path, output_path: Path) -> dict:

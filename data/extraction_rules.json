@@ -37,5 +37,23 @@
         "include": ["foreword", "core_body"]
       }
     }
+  },
+
+  "netherlands_dwp_2024": {
+    "total_pdf_pages_expected": 35,
+    "page_number_printed_mode": "none",
+    "pages": {
+      "cover": [1],
+      "foreword": [2],
+      "table_of_contents": [3],
+      "front_matter": [4, 5],
+      "core_body_ranges": [[6, 19], [21, 28]],
+      "visual_only": [20, 34],
+      "section_dividers": [29],
+      "appendices": [30, 31, 32, 33],
+      "back_cover": [35],
+      "visual_heavy": [1, 5, 10, 20, 29, 34, 35]
+    },
+    "default_analysis_scope": "core_body"
   }
 }

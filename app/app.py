@@ -44,6 +44,13 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 DOCUMENTS: dict[str, str] = {
     "latvia_sdc_2023": "Latvia — State Defence Concept 2023–2027",
     "uk_sdr_2025": "United Kingdom — Strategic Defence Review 2025",
+    "netherlands_dwp_2024": "Netherlands — Defence White Paper 2024",
+}
+
+COMPARISON_LABELS: dict[str, str] = {
+    "latvia_sdc_2023": "Latvia",
+    "uk_sdr_2025": "United Kingdom",
+    "netherlands_dwp_2024": "Netherlands",
 }
 
 SCOPE = "core_body"
@@ -260,17 +267,24 @@ def render_comparison(all_data: dict[str, dict | None]) -> None:
     import pandas as pd
 
     rows = []
+    chart_rows = []
     for cat in cats:
         row: dict[str, Any] = {"Category": cat}
+        chart_row: dict[str, Any] = {"Category": cat}
         for doc_id, d in available.items():
-            label = DOCUMENTS.get(doc_id, doc_id)
+            label = COMPARISON_LABELS.get(doc_id, DOCUMENTS.get(doc_id, doc_id))
             freq  = d["summary"].get(cat, {}).get("frequency_per_1000_words", 0)
             row[label] = fmt_freq(freq)
+            chart_row[label] = freq
         rows.append(row)
+        chart_rows.append(chart_row)
 
     st.dataframe(rows, width="stretch", hide_index=True)
+    comparison_chart = pd.DataFrame(chart_rows).set_index("Category")
+    st.bar_chart(comparison_chart)
     st.caption(
-        "Frequencies are normalized as category mentions per 1,000 analysed words."
+        "Results use a compact English dictionary and may differ from the source "
+        "report's original multilingual analysis."
     )
 
 

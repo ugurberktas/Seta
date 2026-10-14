@@ -34,8 +34,8 @@
     "document_type": "Defence White Paper",
     "filename": "netherlands_defence_white_paper_2024.pdf",
     "source_page_url": "https://english.defensie.nl/latest/news/2024/09/05/defence-white-paper-2024-strong-smart-together",
-    "pdf_url": "https://english.defensie.nl/site/binaries/site-content/collections/documents/2024/09/05/defence-white-paper-2024/NLD%2BDefence%2Bwhite%2Bpaper.pdf",
-    "download_status": "pending",
-    "download_note": "Official 2024 Defence White Paper source confirmed, but current direct PDF endpoint is unavailable/returns 404. Manual recovery required."
+    "pdf_url": "https://english.defensie.nl/binaries/defence/documenten/publications/2024/09/05/defence-white-paper-2024/NLD%2BDefence%2Bwhite%2Bpaper.pdf",
+    "expected_pages": 35,
+    "download_status": "verified"
   }
 ]
