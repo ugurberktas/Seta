@@ -10,6 +10,7 @@ Run from repo root:
 from __future__ import annotations
 
 import json
+from html import escape
 import sys
 from pathlib import Path
 from typing import Any
@@ -64,7 +65,7 @@ CATEGORY_LABELS: dict[str, dict[str, str]] = {
 UI_TEXT: dict[str, dict[str, str]] = {
     "tr": {
         "title": "Güvenlik Araştırma Asistanı",
-        "description": "Kaynak izlenebilirliği ve insan doğrulamasıyla deterministik tehdit sıklığı analizi.",
+        "description": "Ulusal güvenlik ve savunma belgelerinde tehdit kategorilerini karşılaştırın ve kaynak pasajları doğrulayın.",
         "methodology": "Bu PoC, kompakt bir İngilizce sözlük kullanır ve SETA'nın özgün çok dilli sözlüğünü birebir yeniden üretmez.",
         "filters": "Filtreler",
         "document": "Belge",
@@ -98,6 +99,9 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "segment_text": "Pasaj metni",
         "matched_term": "Eşleşen terim",
         "clear": "Temizle",
+        "technical_details": "Teknik detaylar",
+        "pdf_page": "PDF sayfası",
+        "printed_page": "Basılı sayfa",
         "cross_document_comparison": "Belgeler Arası Karşılaştırma",
         "comparison_unavailable": "Karşılaştırma için en az iki belgenin analiz edilmiş olması gerekir.",
         "comparison_methodology": "Sonuçlar kompakt bir İngilizce sözlüğe dayanır ve kaynak raporun özgün çok dilli analizinden farklı olabilir.",
@@ -107,7 +111,7 @@ UI_TEXT: dict[str, dict[str, str]] = {
     },
     "en": {
         "title": "Security Research Assistant",
-        "description": "Deterministic threat-frequency analysis with source traceability and human verification.",
+        "description": "Compare threat categories across national security and defence documents, and verify the source passages.",
         "methodology": "This PoC uses a compact English dictionary and does not reproduce SETA's original multilingual dictionary.",
         "filters": "Filters",
         "document": "Document",
@@ -141,6 +145,9 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "segment_text": "Segment text",
         "matched_term": "Matched term",
         "clear": "Clear",
+        "technical_details": "Technical details",
+        "pdf_page": "PDF page",
+        "printed_page": "Printed page",
         "cross_document_comparison": "Cross-document comparison",
         "comparison_unavailable": "At least two documents must be analysed to show a comparison.",
         "comparison_methodology": "Results use a compact English dictionary and may differ from the source report's original multilingual analysis.",
@@ -198,6 +205,179 @@ def status_label(status: str, text: dict[str, str]) -> str:
     }.get(status, text["unreviewed"])
 
 
+def apply_ui_styles() -> None:
+    """Apply a small, presentation-only theme on top of Streamlit defaults."""
+    st.markdown(
+        """
+        <style>
+        :root {
+            --research-bg: #F7F9FC;
+            --research-card: #FFFFFF;
+            --research-border: #E5EAF0;
+            --research-text: #243247;
+            --research-muted: #66758A;
+            --research-blue: #3B6EA8;
+        }
+
+        [data-testid="stAppViewContainer"] {
+            background: var(--research-bg);
+            color: var(--research-text);
+        }
+        [data-testid="stHeader"] { background: rgba(247, 249, 252, 0.92); }
+        [data-testid="stSidebar"] {
+            background: #FFFFFF;
+            border-right: 1px solid var(--research-border);
+        }
+        [data-testid="stMainBlockContainer"] {
+            max-width: 1240px;
+            padding-top: 2.4rem;
+            padding-bottom: 4rem;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--research-text) !important;
+            letter-spacing: -0.015em;
+        }
+        h1 { font-size: clamp(1.9rem, 3.2vw, 2.5rem) !important; margin-bottom: 0.35rem !important; }
+        h2, h3 { margin-top: 0.2rem !important; }
+        p, label, [data-testid="stCaptionContainer"] { color: var(--research-text) !important; }
+        [data-testid="stCaptionContainer"] { color: var(--research-muted) !important; }
+        hr { border-color: var(--research-border) !important; margin: 1.65rem 0 !important; }
+
+        [data-baseweb="select"] > div {
+            background: #FFFFFF !important;
+            border-color: #DCE3EA !important;
+        }
+        [data-baseweb="select"] span,
+        [data-baseweb="select"] input { color: var(--research-text) !important; }
+        .react-aria-ComboBox [role="group"] {
+            background: #FFFFFF !important;
+            border-color: #DCE3EA !important;
+        }
+        .react-aria-ComboBox input,
+        .react-aria-ComboBox button {
+            color: var(--research-text) !important;
+            background: transparent !important;
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background: var(--research-card);
+            border-color: var(--research-border) !important;
+            border-radius: 12px;
+            box-shadow: none;
+        }
+        [data-testid="stExpander"] {
+            background: var(--research-card);
+            border: 1px solid var(--research-border);
+            border-radius: 10px;
+            margin-bottom: 0.65rem;
+        }
+        [data-testid="stExpander"] details summary { padding: 0.35rem 0.2rem; }
+        [data-testid="stProgressBarTrack"] { background-color: #E8EDF3 !important; }
+        [data-testid="stProgressBarTrack"] > div { background-color: var(--research-blue) !important; }
+
+        .section-kicker {
+            color: var(--research-blue);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.15rem;
+        }
+        .metric-card {
+            min-height: 98px;
+            padding: 1rem 1.05rem;
+            background: #FFFFFF;
+            border: 1px solid var(--research-border);
+            border-radius: 10px;
+        }
+        .metric-card.primary { background: #F1F6FC; border-color: #C9D9EB; }
+        .metric-card.positive { background: #F0F8F3; border-color: #CBE5D4; }
+        .metric-card.negative { background: #FDF3F3; border-color: #F0CECE; }
+        .metric-card.warning { background: #FFF8E8; border-color: #ECD9A4; }
+        .metric-card.neutral { background: #F7F8FA; }
+        .metric-label { color: var(--research-muted); font-size: 0.82rem; line-height: 1.3; }
+        .metric-value {
+            color: var(--research-text);
+            font-size: 1.45rem;
+            font-weight: 650;
+            line-height: 1.25;
+            margin-top: 0.42rem;
+            overflow-wrap: anywhere;
+        }
+        .metric-card.featured .metric-value { color: var(--research-blue); font-size: 1.75rem; }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.55rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 650;
+            margin: 0 0.35rem 0.8rem 0;
+        }
+        .status-badge.positive { color: #276749; background: #E7F5EC; }
+        .status-badge.negative { color: #9B3A3A; background: #FBEAEA; }
+        .status-badge.warning { color: #805B14; background: #FFF2CF; }
+        .status-badge.neutral { color: #586779; background: #EDF1F5; }
+        .passage-text {
+            color: #2E3A4B;
+            background: #FAFBFD;
+            border-left: 3px solid #AFC5DE;
+            border-radius: 0 8px 8px 0;
+            font-size: 1rem;
+            line-height: 1.72;
+            padding: 1rem 1.15rem;
+            margin: 0.35rem 0 0.75rem;
+            white-space: pre-wrap;
+        }
+        [class*="st-key-relevant_"] button {
+            background: #E7F5EC !important;
+            border-color: #B7DCC5 !important;
+            color: #276749 !important;
+        }
+        [class*="st-key-irrelevant_"] button {
+            background: #FBEAEA !important;
+            border-color: #E8C2C2 !important;
+            color: #9B3A3A !important;
+        }
+        [class*="st-key-clear_"] button {
+            background: #F4F6F8 !important;
+            border-color: #DCE2E8 !important;
+            color: #586779 !important;
+        }
+        [data-testid="stButton"] button { border-radius: 8px; font-weight: 600; }
+
+        @media (max-width: 700px) {
+            [data-testid="stMainBlockContainer"] { padding-top: 1.4rem; }
+            .metric-card { min-height: auto; margin-bottom: 0.35rem; }
+            .passage-text { padding: 0.85rem; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_metric_card(
+    label: str,
+    value: Any,
+    *,
+    tone: str = "",
+    featured: bool = False,
+) -> None:
+    classes = " ".join(
+        part for part in ("metric-card", tone, "featured" if featured else "") if part
+    )
+    st.markdown(
+        f'<div class="{classes}"><div class="metric-label">{escape(str(label))}</div>'
+        f'<div class="metric-value">{escape(str(value))}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def status_tone(status: str) -> str:
+    return {"relevant": "positive", "irrelevant": "negative"}.get(status, "neutral")
+
+
 # ---------------------------------------------------------------------------
 # Render helpers
 # ---------------------------------------------------------------------------
@@ -213,12 +393,6 @@ def render_document_overview(
     total = len(matches)
 
     st.subheader(text["document_overview"])
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric(text["country"], COUNTRY_LABELS.get(doc_id, {}).get(language, doc.get("country", "—")))
-    c2.metric(text["analysed_words"], f"{doc.get('total_analysis_words', 0):,}")
-    c3.metric(text["total_matches"], total)
-    c4.metric(text["source_passages"], f"{doc.get('total_segments', 0):,}")
-
     # Review progress (live — do NOT cache)
     rev_summary = get_review_summary(doc_id, data)
     reviewed = rev_summary["overall"]["reviewed"]
@@ -227,10 +401,22 @@ def render_document_overview(
     else:
         progress_frac = 0.0
 
-    st.write(
-        f"**{text['review_progress']}:** "
-        f"{reviewed} / {total} {text['reviewed_suffix']}"
-    )
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        render_metric_card(
+            text["country"],
+            COUNTRY_LABELS.get(doc_id, {}).get(language, doc.get("country", "—")),
+        )
+    with c2:
+        render_metric_card(text["analysed_words"], f"{doc.get('total_analysis_words', 0):,}")
+    with c3:
+        render_metric_card(text["total_matches"], total)
+    with c4:
+        render_metric_card(text["source_passages"], f"{doc.get('total_segments', 0):,}")
+    with c5:
+        render_metric_card(text["review_progress"], f"{reviewed} / {total}", tone="primary")
+
+    st.caption(f"{reviewed} / {total} {text['reviewed_suffix']}")
     st.progress(progress_frac)
 
 
@@ -244,23 +430,51 @@ def render_category_metrics(
     summary = data.get("summary", {})
     cat_data = summary.get(category, {})
 
-    st.subheader(f"{text['category_heading']}: {category_label(category, language)}")
+    st.markdown(
+        f'<div class="section-kicker">{escape(text["category_heading"])}</div>',
+        unsafe_allow_html=True,
+    )
+    st.subheader(category_label(category, language))
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric(text["frequency"], fmt_freq(cat_data.get("frequency_per_1000_words", 0)))
-    c2.metric(text["raw_mentions"], cat_data.get("raw_baseline_mentions", 0))
-    c3.metric(text["segment_hits"], cat_data.get("segment_hits", 0))
-    c4.metric(text["review_required"], cat_data.get("review_required_mentions", 0))
+    with c1:
+        render_metric_card(
+            text["frequency"],
+            fmt_freq(cat_data.get("frequency_per_1000_words", 0)),
+            tone="primary",
+            featured=True,
+        )
+    with c2:
+        render_metric_card(text["raw_mentions"], cat_data.get("raw_baseline_mentions", 0))
+    with c3:
+        render_metric_card(text["segment_hits"], cat_data.get("segment_hits", 0))
+    with c4:
+        render_metric_card(
+            text["review_required"],
+            cat_data.get("review_required_mentions", 0),
+            tone="warning",
+        )
 
-    # Human Verification summary for this category (live)
+
+def render_human_verification(
+    doc_id: str,
+    data: dict,
+    category: str,
+    text: dict[str, str],
+) -> None:
+    """Render the live review summary without changing stored review state."""
     rev_summary = get_review_summary(doc_id, data)
     cat_rev = rev_summary["categories"].get(category, {})
 
-    st.write(f"**{text['human_verification']}**")
+    st.subheader(text["human_verification"])
     v1, v2, v3, v4 = st.columns(4)
-    v1.metric(text["reviewed"], cat_rev.get("reviewed", 0))
-    v2.metric(text["relevant"], cat_rev.get("relevant", 0))
-    v3.metric(text["irrelevant"], cat_rev.get("irrelevant", 0))
-    v4.metric(text["unreviewed"], cat_rev.get("unreviewed", 0))
+    with v1:
+        render_metric_card(text["reviewed"], cat_rev.get("reviewed", 0), tone="primary")
+    with v2:
+        render_metric_card(text["relevant"], cat_rev.get("relevant", 0), tone="positive")
+    with v3:
+        render_metric_card(text["irrelevant"], cat_rev.get("irrelevant", 0), tone="negative")
+    with v4:
+        render_metric_card(text["unreviewed"], cat_rev.get("unreviewed", 0), tone="neutral")
 
 
 def render_ranking(data: dict, language: str, text: dict[str, str]) -> None:
@@ -332,32 +546,50 @@ def render_passages(
         # Live status (never cached)
         current_status = get_review_status(doc_id, mid)
 
+        display_status = status_label(current_status, text)
         if printed_p and printed_p != pdf_p:
-            title = f"PDF p.{pdf_p} / printed p.{printed_p} · {display_cat} · {matched}"
+            title = f"PDF p.{pdf_p} / printed p.{printed_p} · {display_cat} · {matched} · {display_status}"
         else:
-            title = f"PDF p.{pdf_p} · {display_cat} · {matched}"
+            title = f"PDF p.{pdf_p} · {display_cat} · {matched} · {display_status}"
 
         with st.expander(title):
-            # Metadata row
-            col1, col2 = st.columns(2)
-            with col1:
+            badges = (
+                f'<span class="status-badge {status_tone(current_status)}">'
+                f'{escape(display_status)}</span>'
+            )
+            if m.get("requires_review", False):
+                badges += (
+                    f'<span class="status-badge warning">'
+                    f'{escape(text["requires_review"])}</span>'
+                )
+            st.markdown(badges, unsafe_allow_html=True)
+
+            st.markdown(
+                f'<div class="passage-text">{escape(str(m.get("segment_text", "")))}</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(f"{text['matched_term']}: `{matched}`")
+
+            with st.popover(text["technical_details"]):
+                st.write(f"**{text['pdf_page']}:** `{pdf_p}`")
+                if printed_p:
+                    st.write(f"**{text['printed_page']}:** `{printed_p}`")
                 st.write(f"**Segment ID:** `{m.get('segment_id', '—')}`")
                 st.write(f"**Pattern ID:** `{m.get('pattern_id', '—')}`")
                 st.write(f"**Tier:** `{m.get('tier', '—')}`")
-            with col2:
                 st.write(f"**{text['requires_review']}:** `{m.get('requires_review', False)}`")
                 st.write(f"**{text['in_raw_baseline']}:** `{m.get('count_in_raw_baseline', False)}`")
-                st.write(f"**{text['status']}:** {status_label(current_status, text)}")
-
-            # Passage text
-            st.write(f"**{text['segment_text']}:**")
-            st.write(m.get("segment_text", ""))
-            st.caption(f"{text['matched_term']}: `{matched}`")
+                st.write(f"**{text['status']}:** {display_status}")
 
             # VERIFY buttons
             b1, b2, b3 = st.columns(3)
             with b1:
-                if st.button(text["relevant"], key=f"relevant_{mid}"):
+                if st.button(
+                    text["relevant"],
+                    key=f"relevant_{mid}",
+                    type="primary",
+                    width="stretch",
+                ):
                     try:
                         set_review_status(doc_id, mid, "relevant")
                     except Exception as exc:
@@ -365,7 +597,11 @@ def render_passages(
                     else:
                         st.rerun()
             with b2:
-                if st.button(text["irrelevant"], key=f"irrelevant_{mid}"):
+                if st.button(
+                    text["irrelevant"],
+                    key=f"irrelevant_{mid}",
+                    width="stretch",
+                ):
                     try:
                         set_review_status(doc_id, mid, "irrelevant")
                     except Exception as exc:
@@ -373,7 +609,12 @@ def render_passages(
                     else:
                         st.rerun()
             with b3:
-                if st.button(text["clear"], key=f"clear_{mid}"):
+                if st.button(
+                    text["clear"],
+                    key=f"clear_{mid}",
+                    type="tertiary",
+                    width="stretch",
+                ):
                     try:
                         clear_review(doc_id, mid)
                     except Exception as exc:
@@ -387,7 +628,6 @@ def render_comparison(
     language: str,
     text: dict[str, str],
 ) -> None:
-    st.divider()
     st.subheader(text["cross_document_comparison"])
 
     available: dict[str, dict] = {
@@ -418,7 +658,7 @@ def render_comparison(
 
     st.dataframe(rows, width="stretch", hide_index=True)
     comparison_chart = pd.DataFrame(chart_rows).set_index(text["category"])
-    st.bar_chart(comparison_chart)
+    st.bar_chart(comparison_chart, stack=False)
     st.caption(text["comparison_methodology"])
 
 
@@ -432,13 +672,16 @@ def main() -> None:
         page_icon="🔍",
         layout="wide",
     )
+    apply_ui_styles()
 
     with st.sidebar:
+        st.markdown("#### Language / Dil")
         language_name = st.selectbox(
             "Language / Dil",
             options=["Türkçe", "English"],
             index=0,
             key="ui_language",
+            label_visibility="collapsed",
         )
 
     language = "tr" if language_name == "Türkçe" else "en"
@@ -478,7 +721,8 @@ def main() -> None:
 
     # ---- Sidebar ----
     with st.sidebar:
-        st.header(text["filters"])
+        st.divider()
+        st.markdown(f"#### {text['document']}")
 
         document_ids = list(DOCUMENTS)
         document_index = (
@@ -491,6 +735,7 @@ def main() -> None:
             index=document_index,
             format_func=lambda value: document_label(value, language),
             key=f"document_selector_{language}",
+            label_visibility="collapsed",
         )
 
         data = all_data.get(doc_id)
@@ -498,6 +743,7 @@ def main() -> None:
             st.error(text["analysis_missing"])
             st.stop()
 
+        st.markdown(f"#### {text['category']}")
         cats = ordered_categories(data)
         category_index = (
             cats.index(preferred_category)
@@ -509,40 +755,21 @@ def main() -> None:
             index=category_index,
             format_func=lambda value: category_label(value, language),
             key=f"category_selector_{language}",
+            label_visibility="collapsed",
         )
 
-    # ---- Error guard ----
-    if data is None:
-        st.error(text["analysis_missing"])
-        st.stop()
-
-    # ---- Document overview + review progress ----
-    render_document_overview(doc_id, data, language, text)
-    st.divider()
-
-    # ---- Category ranking ----
-    render_ranking(data, language, text)
-    st.divider()
-
-    # ---- Category metrics + human verification summary ----
-    render_category_metrics(doc_id, data, category, language, text)
-    st.divider()
-
-    # ---- Passage filters ----
-    fc1, fc2, fc3 = st.columns(3)
-    with fc1:
+        st.divider()
+        st.markdown(f"#### {text['filters']}")
         show_review_only = st.checkbox(
             text["show_review_required"],
             value=False,
             key="show_review_required",
         )
-    with fc2:
         include_review_only = st.checkbox(
             text["include_review_only"],
             value=False,
             key="include_review_only",
         )
-    with fc3:
         review_statuses = ["all", "unreviewed", "relevant", "irrelevant"]
         review_status_index = (
             review_statuses.index(preferred_review_status)
@@ -561,15 +788,48 @@ def main() -> None:
             key=f"review_status_filter_{language}",
         )
 
+    # ---- Error guard ----
+    if data is None:
+        st.error(text["analysis_missing"])
+        st.stop()
+
+    # ---- Document overview + review progress ----
+    with st.container(border=True):
+        render_document_overview(doc_id, data, language, text)
+
+    st.write("")
+
+    # ---- Category metrics + human verification summary ----
+    with st.container(border=True):
+        render_category_metrics(doc_id, data, category, language, text)
+
+    st.write("")
+
+    # ---- Category ranking ----
+    with st.container(border=True):
+        render_ranking(data, language, text)
+
+    st.write("")
+
+    # ---- Human verification ----
+    with st.container(border=True):
+        render_human_verification(doc_id, data, category, text)
+
+    st.write("")
+
     # ---- Source passages with VERIFY buttons ----
-    render_passages(
-        doc_id, data, category,
-        show_review_only, include_review_only, review_status_filter,
-        language, text,
-    )
+    with st.container(border=True):
+        render_passages(
+            doc_id, data, category,
+            show_review_only, include_review_only, review_status_filter,
+            language, text,
+        )
+
+    st.write("")
 
     # ---- Cross-document comparison ----
-    render_comparison(all_data, language, text)
+    with st.container(border=True):
+        render_comparison(all_data, language, text)
 
 
 if __name__ == "__main__":
