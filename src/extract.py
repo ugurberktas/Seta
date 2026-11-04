@@ -226,6 +226,66 @@ def clean_netherlands_page(text: str, page_num_pdf: int) -> str:
     )
 
 
+def clean_japan_page(text: str, page_num_pdf: int, page_number_printed: int | None) -> str:
+    """
+    Remove running footers, printed page numbers, page-number pointer markers ('See', 'KEY WORD'),
+    and normalize control characters/BOM in Japan Defense White Paper 2026.
+    """
+    if not text:
+        return ""
+
+    # Replace BOM and control characters (PDF font encoding artifacts)
+    text = text.replace("\ufeff", "")
+    text = text.replace("\x08", "").replace("\x01", "")
+
+    # \x07 is bullet in Japanese MOD white paper: normalize to bullet symbol at start of line
+    text = re.sub(r"(?m)^\s*\x07\s*", "• ", text)
+    text = text.replace("\x07", " ")
+
+    lines = text.split("\n")
+    non_empty_indices = [i for i, line in enumerate(lines) if line.strip()]
+    if not non_empty_indices:
+        return ""
+
+    # Special case for blank page 303 where footer is at the top
+    if page_num_pdf == 303:
+        for idx in non_empty_indices:
+            l = lines[idx].strip()
+            if l in {"293", "2026 Defense White Paper"}:
+                lines[idx] = ""
+        return "\n".join(lines)
+
+    remove_start_idx = None
+    printed_str = str(page_number_printed) if page_number_printed is not None else None
+
+    # Check last 12 non-empty lines for the running footer marker
+    # The running footer block starts at page_number_printed when immediately followed
+    # by "DEFENSE OF JAPAN" or "2026 Defense White Paper".
+    tail_indices = non_empty_indices[-12:]
+    for j, idx in enumerate(tail_indices):
+        l = lines[idx].strip()
+        if printed_str and l == printed_str and j + 1 < len(tail_indices):
+            next_l = lines[tail_indices[j + 1]].strip()
+            if next_l in ("DEFENSE OF JAPAN", "2026 Defense White Paper"):
+                remove_start_idx = idx
+                # If immediate preceding lines are footer markers ("See", "KEY WORD", "Chapter N"), include them
+                k = j - 1
+                while k >= 0:
+                    prev_idx = tail_indices[k]
+                    prev_l = lines[prev_idx].strip()
+                    if prev_l in {"See", "KEY WORD"} or re.match(r"^Chapter\s+\d+$", prev_l):
+                        remove_start_idx = prev_idx
+                        k -= 1
+                    else:
+                        break
+                break
+
+    if remove_start_idx is not None:
+        return "\n".join(lines[:remove_start_idx])
+
+    return "\n".join(lines)
+
+
 def repair_hyphenated_line_breaks(text: str) -> str:
     """
     Repairs safe hyphenated line-breaks:
@@ -284,6 +344,8 @@ def clean_page_text(raw_text: str, doc_id: str, page_num_pdf: int, page_number_p
         text = clean_uk_footer(text, page_number_printed)
     elif doc_id == "netherlands_dwp_2024":
         text = clean_netherlands_page(text, page_num_pdf)
+    elif doc_id == "japan_doj_2026":
+        text = clean_japan_page(text, page_num_pdf, page_number_printed)
 
     # 2. Non-breaking space replacement (\u00a0 -> space)
     text = text.replace("\u00a0", " ")

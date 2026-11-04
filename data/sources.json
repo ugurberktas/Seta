@@ -37,5 +37,18 @@
     "pdf_url": "https://english.defensie.nl/binaries/defence/documenten/publications/2024/09/05/defence-white-paper-2024/NLD%2BDefence%2Bwhite%2Bpaper.pdf",
     "expected_pages": 35,
     "download_status": "verified"
+  },
+  {
+    "id": "japan_doj_2026",
+    "country": "Japan",
+    "title": "Defense of Japan 2026",
+    "year": 2026,
+    "language": "English",
+    "document_type": "Defense White Paper",
+    "publisher": "Ministry of Defense, Japan",
+    "filename": "japan_defense_of_japan_2026.pdf",
+    "source_page_url": "https://www.mod.go.jp/en/publ/w_paper/index.html",
+    "expected_pages": 616,
+    "download_status": "verified"
   }
 ]

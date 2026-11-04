@@ -20,6 +20,11 @@ NETHERLANDS_MAX_SEGMENT_WORDS = 450
 NETHERLANDS_FALLBACK_TARGET_WORDS = 300
 NETHERLANDS_FALLBACK_PREFERRED_MAX_WORDS = 400
 
+JAPAN_DOCUMENT_ID = "japan_doj_2026"
+JAPAN_MAX_SEGMENT_WORDS = 400
+JAPAN_TARGET_WORDS = 280
+JAPAN_PREFERRED_MAX_WORDS = 380
+
 
 def load_json(file_path: Path) -> dict:
     """Load JSON file."""
@@ -254,12 +259,149 @@ def split_netherlands_oversized_segment(segment: dict, page_lines: list[str]) ->
     return split_segments
 
 
+def is_japan_structural_start(line: str) -> bool:
+    """Detect structural sub-headings and figure/box starts in Japan White Paper."""
+    s = line.strip()
+    if re.match(r"^\(\d+\)\s+", s):
+        return True
+    if re.match(r"^\([ivx]+\)\s+", s, re.IGNORECASE):
+        return True
+    if re.match(r"^[a-z]\.\s+[A-Z]", s):
+        return True
+    if re.match(r"^(?:Fig\.|Table)\s+[I|V|X|\d]+", s):
+        return True
+    if re.match(r"^(?:Commentary|Perspective|VOICE)\b", s):
+        return True
+    return False
+
+
+def is_sentence_end(line: str) -> bool:
+    """Check if a line ends with standard sentence-ending punctuation."""
+    s = line.rstrip()
+    return s.endswith((".", "!", "?", '."', ".'", '?”', '!”', ".\”", ".”"))
+
+
+def split_japan_oversized_segment(segment: dict, page_lines: list[str]) -> list[dict]:
+    """
+    Split an oversized Japan segment at deterministic textual boundaries:
+    1. Structural markers ((1), (i), a., Fig., Commentary/Perspective/VOICE)
+    2. Sentence boundaries
+    3. Safe line fallback
+    """
+    if segment["word_count"] <= JAPAN_MAX_SEGMENT_WORDS:
+        return [segment]
+
+    line_entries = [
+        (line_number, page_lines[line_number - 1].strip())
+        for line_number in range(segment["source_line_start"], segment["source_line_end"] + 1)
+        if page_lines[line_number - 1].strip()
+    ]
+    chunks = []
+    start_index = 0
+
+    while start_index < len(line_entries):
+        remaining_entries = line_entries[start_index:]
+        remaining_words = sum(len(line.split()) for _, line in remaining_entries)
+        if remaining_words <= JAPAN_PREFERRED_MAX_WORDS:
+            chunks.append(remaining_entries)
+            break
+
+        candidates = []
+        cumulative_words = 0
+        for relative_index, (_, line) in enumerate(remaining_entries[:-1]):
+            cumulative_words += len(line.split())
+            trailing_words = remaining_words - cumulative_words
+            next_line = remaining_entries[relative_index + 1][1]
+
+            is_struct = is_japan_structural_start(next_line)
+            is_sent = is_sentence_end(line)
+
+            # Priority 0: Structural sub-heading boundary
+            if is_struct and cumulative_words >= 140 and trailing_words >= 100:
+                candidates.append((0, abs(cumulative_words - JAPAN_TARGET_WORDS), relative_index))
+            # Priority 1: Sentence boundary
+            elif is_sent and cumulative_words >= 170 and trailing_words >= 100:
+                candidates.append((1, abs(cumulative_words - JAPAN_TARGET_WORDS), relative_index))
+
+            if cumulative_words > JAPAN_PREFERRED_MAX_WORDS:
+                break
+
+        if candidates:
+            candidates.sort(key=lambda c: (c[0], c[1]))
+            split_relative_index = candidates[0][2]
+        else:
+            # Fallback 1: Any sentence boundary before 450 words
+            cumulative_words = 0
+            sent_candidates = []
+            for relative_index, (_, line) in enumerate(remaining_entries[:-1]):
+                cumulative_words += len(line.split())
+                trailing_words = remaining_words - cumulative_words
+                if is_sentence_end(line) and cumulative_words >= 120 and trailing_words >= 80:
+                    sent_candidates.append((abs(cumulative_words - JAPAN_TARGET_WORDS), relative_index))
+                if cumulative_words > 450:
+                    break
+            if sent_candidates:
+                sent_candidates.sort(key=lambda c: c[0])
+                split_relative_index = sent_candidates[0][1]
+            else:
+                # Fallback 2: Any line boundary
+                cumulative_words = 0
+                safe_candidates = []
+                for relative_index, (_, line) in enumerate(remaining_entries[:-1]):
+                    cumulative_words += len(line.split())
+                    trailing_words = remaining_words - cumulative_words
+                    if cumulative_words >= 150 and trailing_words >= 80:
+                        safe_candidates.append((abs(cumulative_words - JAPAN_TARGET_WORDS), relative_index))
+                    if cumulative_words >= JAPAN_PREFERRED_MAX_WORDS:
+                        break
+                if not safe_candidates:
+                    chunks.append(remaining_entries)
+                    break
+                safe_candidates.sort(key=lambda c: c[0])
+                split_relative_index = safe_candidates[0][1]
+
+        split_index = start_index + split_relative_index + 1
+        chunks.append(line_entries[start_index:split_index])
+        start_index = split_index
+
+    split_segments = []
+    fallback_type = segment["segment_type"]
+    if fallback_type in {"heading", "bullet_item"}:
+        fallback_type = "paragraph"
+
+    for chunk in chunks:
+        first_line = chunk[0][1]
+        chunk_type = fallback_type
+        if is_japan_structural_start(first_line):
+            if re.match(r"^\(\d+\)\s+", first_line) or re.match(r"^\([ivx]+\)\s+", first_line, re.IGNORECASE):
+                chunk_type = "numbered_paragraph"
+            elif re.match(r"^[a-z]\.\s+", first_line):
+                chunk_type = "paragraph"
+        chunk_text = normalize_segment_text([line for _, line in chunk])
+        split_segment = dict(segment)
+        split_segment.update({
+            "segment_type": chunk_type,
+            "source_line_start": chunk[0][0],
+            "source_line_end": chunk[-1][0],
+            "text": chunk_text,
+            "word_count": len(chunk_text.split()),
+            "char_count": len(chunk_text),
+        })
+        split_segments.append(split_segment)
+
+    return split_segments
+
+
 def finalize_page_segments(page_data: dict, segments: list[dict], page_lines: list[str]) -> list[dict]:
     """Apply document-specific fallback splitting and assign final deterministic IDs."""
     if page_data["document_id"] == NETHERLANDS_DOCUMENT_ID:
         finalized = []
         for segment in segments:
             finalized.extend(split_netherlands_oversized_segment(segment, page_lines))
+    elif page_data["document_id"] == JAPAN_DOCUMENT_ID:
+        finalized = []
+        for segment in segments:
+            finalized.extend(split_japan_oversized_segment(segment, page_lines))
     else:
         finalized = segments
 

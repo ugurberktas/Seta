@@ -55,5 +55,21 @@
       "visual_heavy": [1, 5, 10, 20, 29, 34, 35]
     },
     "default_analysis_scope": "core_body"
+  },
+
+  "japan_doj_2026": {
+    "total_pdf_pages_expected": 616,
+    "page_number_printed_offset": -10,
+    "pages": {
+      "cover": [1, 2],
+      "foreword": [3, 4],
+      "table_of_contents": [[5, 10]],
+      "front_matter": [[11, 67]],
+      "section_dividers": [68],
+      "core_body_ranges": [[69, 611]],
+      "appendices": [[612, 615]],
+      "back_cover": [616]
+    },
+    "default_analysis_scope": "core_body"
   }
 }

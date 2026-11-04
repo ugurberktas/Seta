@@ -220,3 +220,60 @@ def test_netherlands_real_segments_respect_max_words():
         pytest.skip("segments file is not tracked")
     segments = json.loads(stored.read_text(encoding="utf-8"))["segments"]
     assert max(s["word_count"] for s in segments) <= sg.NETHERLANDS_MAX_SEGMENT_WORDS
+
+
+# ---------------------------------------------------------------------------
+# Japan-specific segmentation hardening tests
+# ---------------------------------------------------------------------------
+
+def test_japan_non_oversized_segment_remains_unchanged():
+    segment = {
+        "segment_type": "paragraph",
+        "source_line_start": 1,
+        "source_line_end": 5,
+        "word_count": 250,
+        "text": "Regular passage text.",
+        "char_count": 21,
+    }
+    lines = ["Regular passage text."]
+    result = sg.split_japan_oversized_segment(segment, lines)
+    assert result == [segment]
+
+
+def test_japan_oversized_segment_splits_at_structural_or_sentence_boundary():
+    # Construct a synthetic oversized segment with two sub-points (1) and (2)
+    chunk1_lines = ["(1) First section header."] + ["This is body text discussing defense objectives." for _ in range(35)]
+    chunk2_lines = ["(2) Second section header."] + ["This is subsequent text discussing operations." for _ in range(35)]
+    all_lines = chunk1_lines + chunk2_lines
+
+    text = " ".join(all_lines)
+    segment = {
+        "segment_type": "paragraph",
+        "source_line_start": 1,
+        "source_line_end": len(all_lines),
+        "word_count": len(text.split()),
+        "text": text,
+        "char_count": len(text),
+    }
+
+    assert segment["word_count"] > sg.JAPAN_MAX_SEGMENT_WORDS
+
+    parts = sg.split_japan_oversized_segment(segment, all_lines)
+    assert len(parts) >= 2
+    # Verify word preservation
+    assert sum(p["word_count"] for p in parts) == segment["word_count"]
+    # Verify that each part is within reasonable bounds
+    for p in parts:
+        assert p["word_count"] <= 450
+
+
+def test_japan_real_segments_preserve_word_count_and_eliminate_oversized():
+    stored = PROCESSED / "japan_doj_2026_core_body_segments.json"
+    if not stored.exists():
+        pytest.skip("Japan segments file not generated yet")
+    data = json.loads(stored.read_text(encoding="utf-8"))
+    segments = data["segments"]
+    assert sum(s["word_count"] for s in segments) == 324705
+    assert sum(1 for s in segments if s["word_count"] >= 500) == 0
+    assert max(s["word_count"] for s in segments) <= 450
+
