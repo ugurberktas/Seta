@@ -37,6 +37,7 @@ data/processed/*
 !data/processed/latvia_sdc_2023_core_body_threat_matches.json
 !data/processed/uk_sdr_2025_core_body_threat_matches.json
 !data/processed/netherlands_dwp_2024_core_body_threat_matches.json
+!data/processed/japan_doj_2026_core_body_threat_matches.json
 
 # Runtime review decisions (keep folder via .gitkeep)
 data/reviews/*.json

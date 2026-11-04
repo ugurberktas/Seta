@@ -288,7 +288,7 @@ ABSOLUTE_PATH_PATTERNS = [
     r"/home/",
     r"[A-Za-z]:\\",       # Windows drive path, e.g. C:\...
     r"[A-Za-z]:\\\\",     # same, as escaped inside JSON strings
-    r"[A-Za-z]:/",        # Windows drive path with forward slashes
+    r"(?:^|[\s\"'\(])[A-Za-z]:/",  # Windows drive path with forward slashes, e.g. C:/
 ]
 
 
@@ -310,3 +310,70 @@ def test_portable_path_is_repo_relative_and_never_absolute(tmp_path):
     assert mt.portable_path(Path("data/processed/x_segments.json")) == "data/processed/x_segments.json"
     # Paths outside the repo are kept as given, not rewritten to a repo location.
     assert mt.portable_path(tmp_path / "s.json") == (tmp_path / "s.json").as_posix()
+
+
+# ---------------------------------------------------------------------------
+# Japan-specific regression tests
+# ---------------------------------------------------------------------------
+
+JAPAN_BASELINE = {
+    "document_id": "japan_doj_2026",
+    "total_analysis_words": 324705,
+    "total_segments": 3746,
+    "total_matches": 2956,
+    "raw_counts": {
+        "China": 1441,
+        "Russia": 890,
+        "Cyber": 582,
+        "Hybrid": 24,
+        "Migration": 6,
+    },
+    "frequencies": {
+        "China": 4.437874,
+        "Russia": 2.740949,
+        "Cyber": 1.792396,
+        "Hybrid": 0.073913,
+        "Migration": 0.018478,
+    },
+}
+
+
+def test_japan_canonical_threat_matches_baseline():
+    import re
+
+    path = PROCESSED / "japan_doj_2026_core_body_threat_matches.json"
+    if not path.exists():
+        pytest.skip("Japan threat matches canonical file not found")
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    doc = data["document"]
+    assert doc["document_id"] == JAPAN_BASELINE["document_id"]
+    assert doc["total_analysis_words"] == JAPAN_BASELINE["total_analysis_words"]
+    assert doc["total_segments"] == JAPAN_BASELINE["total_segments"]
+    assert doc["source_segments_file"] == "data/processed/japan_doj_2026_core_body_segments.json"
+
+    assert len(data["matches"]) == JAPAN_BASELINE["total_matches"]
+
+    for cat, expected_raw in JAPAN_BASELINE["raw_counts"].items():
+        assert data["summary"][cat]["raw_baseline_mentions"] == expected_raw
+        assert data["summary"][cat]["frequency_per_1000_words"] == JAPAN_BASELINE["frequencies"][cat]
+
+    # Verify no machine-specific absolute path
+    raw_text = path.read_text(encoding="utf-8")
+    for pattern in ABSOLUTE_PATH_PATTERNS:
+        assert not re.search(pattern, raw_text), f"Japan matches file contains a machine-specific path ({pattern})"
+
+
+def test_rematching_japan_segments_reproduces_tracked_output(tmp_path):
+    segments_path = PROCESSED / "japan_doj_2026_core_body_segments.json"
+    matches_path = PROCESSED / "japan_doj_2026_core_body_threat_matches.json"
+    if not (segments_path.exists() and matches_path.exists()):
+        pytest.skip("Japan segments or matches file not found")
+    segments = json.loads(segments_path.read_text(encoding="utf-8"))
+    dictionary = json.loads(DICTIONARY_PATH.read_text(encoding="utf-8"))
+    result = mt.match_threats(segments, dictionary, segments_path, tmp_path / "out.json")
+    tracked = json.loads(matches_path.read_text(encoding="utf-8"))
+    assert result["matches"] == tracked["matches"]
+    assert result["summary"] == tracked["summary"]
+    assert result["ranking_by_frequency"] == tracked["ranking_by_frequency"]
+
