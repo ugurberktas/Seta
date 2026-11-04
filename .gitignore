@@ -29,9 +29,14 @@ htmlcov/
 data/raw/*.pdf
 !data/raw/.gitkeep
 
-# Processed data (keep folder via .gitkeep)
+# Processed data: ignore everything by default (keep folder via .gitkeep).
+# Only the canonical demo outputs consumed by the app for the 3 demo documents
+# are tracked, so a clean clone can build and run the Docker demo.
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/latvia_sdc_2023_core_body_threat_matches.json
+!data/processed/uk_sdr_2025_core_body_threat_matches.json
+!data/processed/netherlands_dwp_2024_core_body_threat_matches.json
 
 # Runtime review decisions (keep folder via .gitkeep)
 data/reviews/*.json

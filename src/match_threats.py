@@ -24,6 +24,25 @@ def load_json(file_path: Path) -> dict:
         return json.load(f)
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def portable_path(path: Path) -> str:
+    """Return a stable, machine-independent path string for output metadata.
+
+    Paths inside the repository are emitted relative to the repo root with
+    forward slashes; other paths are emitted as given (never resolved to an
+    absolute machine-specific location).
+    """
+    path = Path(path)
+    if path.is_absolute():
+        try:
+            return path.relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            return path.as_posix()
+    return path.as_posix()
+
+
 def spans_overlap(span1: tuple[int, int], span2: tuple[int, int]) -> bool:
     """Check if two half-open spans [s1, e1) and [s2, e2) overlap."""
     return max(span1[0], span2[0]) < min(span1[1], span2[1])
@@ -219,7 +238,7 @@ def match_threats(
             "document_id": doc_meta.get("document_id"),
             "country": doc_meta.get("country"),
             "analysis_scope": doc_meta.get("analysis_scope"),
-            "source_segments_file": str(input_segments_path),
+            "source_segments_file": portable_path(input_segments_path),
             "dictionary_version": dict_data.get("version", 1),
             "total_analysis_words": total_words,
             "total_segments": len(segments)

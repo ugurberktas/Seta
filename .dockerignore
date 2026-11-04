@@ -16,3 +16,12 @@ htmlcov/
 
 data/raw/
 data/reviews/*.json
+
+# Additional local/generated files not needed in the image
+.venv*/
+.idea/
+.vscode/
+
+# Intermediate processed artifacts (the demo only needs *_threat_matches.json)
+data/processed/*_core_body.json
+data/processed/*_core_body_segments.json
