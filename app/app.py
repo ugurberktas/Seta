@@ -84,6 +84,7 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "country": "Ülke",
         "analysed_words": "İncelenen kelimeler",
         "total_matches": "Toplam eşleşme",
+        "total_segments": "Toplam segment",
         "source_passages": "Kaynak Pasajlar",
         "review_progress": "İnceleme ilerlemesi",
         "reviewed_suffix": "incelendi",
@@ -155,6 +156,7 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "country": "Country",
         "analysed_words": "Analysed words",
         "total_matches": "Total matches",
+        "total_segments": "Total segments",
         "source_passages": "Source Passages",
         "review_progress": "Review progress",
         "reviewed_suffix": "reviewed",
@@ -162,7 +164,7 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "threat_category_frequency": "Threat Category Frequency",
         "frequency": "Frequency / 1,000 words",
         "raw_mentions": "Raw mentions",
-        "segment_hits": "Segment hits",
+        "segment_hits": "Passage hits",
         "review_required": "Review-required",
         "frequency_help": "This is mention frequency per 1,000 analysed words; it is not a measure of threat severity.",
         "review_required_help": "These matches require human review of their context.",
@@ -1182,7 +1184,7 @@ def render_document_overview(
     with c3:
         render_metric_card(text["total_matches"], total)
     with c4:
-        render_metric_card(text["source_passages"], f"{doc.get('total_segments', 0):,}")
+        render_metric_card(text["total_segments"], f"{doc.get('total_segments', 0):,}")
     with c5:
         render_metric_card(text["review_progress"], f"{reviewed} / {total}", tone="primary")
 

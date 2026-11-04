@@ -136,20 +136,24 @@ def test_json_fallback_stores_locally(reset_store_state):
 
 def test_fail_safe_raises_error_on_connection_failure():
     """If DATABASE_URL is set but DB cannot connect, raise DatabaseStorageError and DO NOT fallback."""
-    fake_url = "postgresql://user:wrongpassword@nonexistent.domain.xyz:5432/db"
+    fake_url = "postgresql://user:wrongpassword@unreachable.host:5432/db"
     review_store.set_database_url(fake_url)
 
-    with pytest.raises(DatabaseStorageError) as exc_info:
-        review_store.load_reviews("test_doc")
-    assert "Failed to connect" in str(exc_info.value) or "Failed to load" in str(exc_info.value)
+    def failing_connect(*args, **kwargs):
+        raise Exception("could not connect to server: Connection timed out")
 
-    # Must also raise on write
-    with pytest.raises(DatabaseStorageError):
-        review_store.set_passage_review_status("test_doc", "Russia", "seg_001", "relevant")
+    with patch("db_review_store.psycopg2.connect", side_effect=failing_connect):
+        with pytest.raises(DatabaseStorageError) as exc_info:
+            review_store.load_reviews("test_doc")
+        assert "Failed to connect" in str(exc_info.value) or "Failed to load" in str(exc_info.value)
 
-    # Must also raise on clear
-    with pytest.raises(DatabaseStorageError):
-        review_store.clear_passage_review("test_doc", "Russia", "seg_001")
+        # Must also raise on write
+        with pytest.raises(DatabaseStorageError):
+            review_store.set_passage_review_status("test_doc", "Russia", "seg_001", "relevant")
+
+        # Must also raise on clear
+        with pytest.raises(DatabaseStorageError):
+            review_store.clear_passage_review("test_doc", "Russia", "seg_001")
 
 
 def test_fail_safe_raises_when_psycopg2_missing(monkeypatch):
@@ -349,23 +353,41 @@ def test_review_store_delegation_to_postgres():
 
 
 # ===========================================================================
-# 7. SSL Configuration Test
+# 7. SSL & Connection Timeout Configuration Tests
 # ===========================================================================
 
-def test_ssl_applied_for_remote_hosts():
-    """Remote PostgreSQL URLs must receive sslmode='require' by default."""
+def test_ssl_and_connect_timeout_applied_for_remote_hosts():
+    """Remote PostgreSQL URLs must receive sslmode='require' and connect_timeout=5."""
     mock_connect = MagicMock()
     with patch("db_review_store.psycopg2.connect", mock_connect):
         remote_url = "postgresql://user:pass@ep-cool-db.aws.neon.tech:5432/neondb"
         db_review_store.get_connection(remote_url)
-        mock_connect.assert_called_once_with(remote_url, sslmode="require")
+        mock_connect.assert_called_once_with(
+            remote_url,
+            connect_timeout=db_review_store.CONNECT_TIMEOUT_SECONDS,
+            sslmode="require",
+        )
 
 
 def test_ssl_not_forced_for_localhost():
-    """Localhost PostgreSQL URLs do not get sslmode forced."""
+    """Localhost PostgreSQL URLs get connect_timeout=5 but not sslmode forced."""
     mock_connect = MagicMock()
     with patch("db_review_store.psycopg2.connect", mock_connect):
         local_url = "postgresql://user:pass@localhost:5432/neondb"
         db_review_store.get_connection(local_url)
-        mock_connect.assert_called_once_with(local_url)
+        mock_connect.assert_called_once_with(
+            local_url,
+            connect_timeout=db_review_store.CONNECT_TIMEOUT_SECONDS,
+        )
+
+
+def test_unreachable_connection_timeout_raises_storage_error():
+    """Simulate connection timeout failure; must raise DatabaseStorageError without fallback."""
+    def timeout_connect(*args, **kwargs):
+        raise Exception("connection to server at 'unreachable.host' timed out")
+
+    with patch("db_review_store.psycopg2.connect", side_effect=timeout_connect):
+        with pytest.raises(DatabaseStorageError) as exc_info:
+            db_review_store.get_connection("postgresql://user:pass@unreachable.host:5432/db")
+        assert "timed out" in str(exc_info.value)
 

@@ -169,6 +169,66 @@ def test_legacy_conflicting_reviews_resolve_to_unreviewed():
     assert set(diag["conflicting_statuses"]) == {"relevant", "irrelevant"}
 
 
+def test_legacy_review_inheritance_matrix():
+    """Verify exact 0/N, partial (1/N, 3/4), N/N unanimous, and N/N conflicting rules."""
+    matches = [
+        {"match_id": f"m_{i}", "category": "Russia"}
+        for i in range(1, 5)  # N = 4 constituent matches
+    ]
+
+    # 1. 0/N reviewed: passage must be unreviewed
+    reviews_0_of_4 = {}
+    st_0, diag_0 = resolve_passage_status("Russia", "seg_x", matches, reviews_0_of_4)
+    assert st_0 == "unreviewed"
+    assert diag_0["source"] == "default"
+
+    # 2. 1/N reviewed: passage must NOT become relevant, stays unreviewed
+    reviews_1_of_4 = {"m_1": {"status": "relevant"}}
+    st_1, diag_1 = resolve_passage_status("Russia", "seg_x", matches, reviews_1_of_4)
+    assert st_1 == "unreviewed"
+    assert diag_1["source"] == "partial_legacy_review"
+    assert diag_1["reviewed_matches"] == 1
+    assert diag_1["total_constituent_matches"] == 4
+
+    # 3. 3/N reviewed (partial): still stays unreviewed
+    reviews_3_of_4 = {
+        "m_1": {"status": "relevant"},
+        "m_2": {"status": "relevant"},
+        "m_3": {"status": "relevant"},
+    }
+    st_3, diag_3 = resolve_passage_status("Russia", "seg_x", matches, reviews_3_of_4)
+    assert st_3 == "unreviewed"
+    assert diag_3["source"] == "partial_legacy_review"
+    assert diag_3["reviewed_matches"] == 3
+    assert diag_3["total_constituent_matches"] == 4
+
+    # 4. N/N unanimous relevant: passage becomes relevant
+    reviews_all_rel = {f"m_{i}": {"status": "relevant"} for i in range(1, 5)}
+    st_rel, diag_rel = resolve_passage_status("Russia", "seg_x", matches, reviews_all_rel)
+    assert st_rel == "relevant"
+    assert diag_rel["source"] == "legacy_unanimous"
+    assert diag_rel["inherited_from_matches"] == 4
+
+    # 5. N/N unanimous irrelevant: passage becomes irrelevant
+    reviews_all_irr = {f"m_{i}": {"status": "irrelevant"} for i in range(1, 5)}
+    st_irr, diag_irr = resolve_passage_status("Russia", "seg_x", matches, reviews_all_irr)
+    assert st_irr == "irrelevant"
+    assert diag_irr["source"] == "legacy_unanimous"
+    assert diag_irr["inherited_from_matches"] == 4
+
+    # 6. N/N conflicting: 3 relevant + 1 irrelevant -> unreviewed
+    reviews_conflict = {
+        "m_1": {"status": "relevant"},
+        "m_2": {"status": "relevant"},
+        "m_3": {"status": "relevant"},
+        "m_4": {"status": "irrelevant"},
+    }
+    st_conf, diag_conf = resolve_passage_status("Russia", "seg_x", matches, reviews_conflict)
+    assert st_conf == "unreviewed"
+    assert diag_conf["source"] == "legacy_conflict"
+    assert diag_conf["total_matches_reviewed"] == 4
+
+
 def test_passage_level_decision_precedence():
     """Direct passage-level review takes strict precedence over legacy match records."""
     matches = [

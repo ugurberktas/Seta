@@ -35,19 +35,24 @@ CREATE INDEX IF NOT EXISTS idx_review_decisions_doc
 """
 
 
+CONNECT_TIMEOUT_SECONDS = 5
+
+
 class DatabaseStorageError(RuntimeError):
     """Raised when PostgreSQL storage operation fails."""
     pass
 
 
 def get_connection(db_url: str):
-    """Open a psycopg2 connection with SSL configuration as appropriate."""
+    """Open a psycopg2 connection with SSL configuration and a 5-second connect timeout."""
     if psycopg2 is None:
         raise DatabaseStorageError(
             "psycopg2 is not installed. Install psycopg2-binary to use PostgreSQL backend."
         )
 
-    conn_kwargs: dict[str, Any] = {}
+    conn_kwargs: dict[str, Any] = {
+        "connect_timeout": CONNECT_TIMEOUT_SECONDS,
+    }
     lower_url = db_url.lower()
     # Apply sslmode=require for remote hosts unless already specified or localhost
     if (
@@ -66,7 +71,12 @@ def get_connection(db_url: str):
 
 
 def init_table_if_needed(db_url: str) -> None:
-    """Safely and idempotently ensure review_decisions table exists."""
+    """MANUAL ADMIN HELPER: Safely and idempotently ensure review_decisions table exists.
+
+    NOTE: Production schema migrations should be run via sql/001_review_decisions.sql.
+    This helper is provided solely for manual/CLI database initialization and is NEVER
+    called automatically during application startup or runtime.
+    """
     conn = get_connection(db_url)
     try:
         with conn:

@@ -263,11 +263,13 @@ def resolve_passage_status(
     """Determine effective passage review status from passage decisions and legacy match records.
 
     Rules:
-    1. Direct passage-level record ("{category}::{segment_id}") takes precedence.
-    2. If no direct record, inspect legacy match-level records:
-       - No reviewed legacy matches -> "unreviewed"
-       - All reviewed legacy matches have same status -> inherit that status (unanimous)
-       - Conflicting statuses -> "unreviewed" (flagged as legacy conflict)
+    1. Direct passage-level record ("{category}::{segment_id}") takes precedence immediately.
+    2. If no direct record, inspect ALL constituent legacy match_ids:
+       - If zero legacy matches are reviewed -> "unreviewed"
+       - If fewer than N constituent matches are reviewed -> "unreviewed" (source: "partial_legacy_review")
+       - If all N matches are reviewed and all statuses are "relevant" -> "relevant" (source: "legacy_unanimous")
+       - If all N matches are reviewed and all statuses are "irrelevant" -> "irrelevant" (source: "legacy_unanimous")
+       - If all N matches are reviewed but statuses conflict -> "unreviewed" (source: "legacy_conflict")
     3. Invalid/unknown stored values are strictly treated as "unreviewed".
 
     Returns:
@@ -288,17 +290,20 @@ def resolve_passage_status(
                 "note": "Invalid passage status treated as unreviewed",
             }
 
-    # No direct passage record: inspect legacy constituent matches
+    # No direct passage record: inspect ALL constituent legacy matches
     if not constituent_matches:
+        return "unreviewed", {"source": "default"}
+
+    valid_matches = [m for m in constituent_matches if m.get("match_id")]
+    total_n = len(valid_matches)
+    if total_n == 0:
         return "unreviewed", {"source": "default"}
 
     legacy_statuses: list[str] = []
     invalid_found: list[Any] = []
 
-    for m in constituent_matches:
-        mid = m.get("match_id")
-        if not mid:
-            continue
+    for m in valid_matches:
+        mid = m["match_id"]
         m_rec = reviews_dict.get(mid)
         if m_rec is not None and isinstance(m_rec, dict):
             s = m_rec.get("status")
@@ -309,24 +314,37 @@ def resolve_passage_status(
             else:
                 invalid_found.append(s)
 
-    if not legacy_statuses:
+    # 1. Zero legacy matches reviewed
+    if len(legacy_statuses) == 0:
         diag: dict[str, Any] = {"source": "default"}
         if invalid_found:
             diag["invalid_legacy_statuses"] = invalid_found
         return "unreviewed", diag
 
+    # 2. Fewer than N constituent matches reviewed: do NOT infer passage relevance from a partial subset
+    if len(legacy_statuses) < total_n:
+        diag = {
+            "source": "partial_legacy_review",
+            "reviewed_matches": len(legacy_statuses),
+            "total_constituent_matches": total_n,
+        }
+        if invalid_found:
+            diag["invalid_legacy_statuses"] = invalid_found
+        return "unreviewed", diag
+
+    # 3. All N matches reviewed: check for unanimity or conflict
     unique_statuses = set(legacy_statuses)
     if len(unique_statuses) == 1:
         inherited = legacy_statuses[0]
         diag = {
             "source": "legacy_unanimous",
-            "inherited_from_matches": len(legacy_statuses),
+            "inherited_from_matches": total_n,
         }
         if invalid_found:
             diag["invalid_legacy_statuses"] = invalid_found
         return inherited, diag
 
-    # Conflicting legacy statuses exist
+    # 4. All N matches reviewed but statuses conflict
     return "unreviewed", {
         "source": "legacy_conflict",
         "conflicting_statuses": sorted(unique_statuses),
