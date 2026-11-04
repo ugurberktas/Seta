@@ -9,10 +9,11 @@ Run from repo root:
 
 from __future__ import annotations
 
-import json
+from collections import Counter, OrderedDict
 from html import escape
-import sys
+import json
 from pathlib import Path
+import sys
 from typing import Any
 
 import streamlit as st
@@ -30,6 +31,12 @@ from review_store import (  # noqa: E402
     set_review_status,
     clear_review,
     get_review_summary,
+    load_reviews,
+    get_passage_review_status,
+    set_passage_review_status,
+    clear_passage_review,
+    resolve_passage_status,
+    make_passage_key,
 )
 
 # ---------------------------------------------------------------------------
@@ -93,6 +100,14 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "relevant": "İlgili",
         "irrelevant": "İlgisiz",
         "unreviewed": "İncelenmedi",
+        "reviewed_passages": "İncelenen Pasajlar",
+        "relevant_passages": "İlgili Pasajlar",
+        "irrelevant_passages": "İlgisiz Pasajlar",
+        "unreviewed_passages": "Bekleyen Pasajlar",
+        "passage_summary_help": "Bu kategori, {passages} kaynak pasaj genelinde {mentions} terim bahsetmesi içermektedir.",
+        "matched_terms": "Eşleşen terimler",
+        "offsets": "Karakter aralığı",
+        "legacy_conflict_badge": "Eski çelişki",
         "show_review_required": "Yalnızca inceleme gerektiren eşleşmeleri göster",
         "include_review_only": "Yalnızca inceleme amaçlı eşleşmeleri dahil et",
         "review_status": "İnceleme durumu",
@@ -156,6 +171,14 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "relevant": "Relevant",
         "irrelevant": "Irrelevant",
         "unreviewed": "Unreviewed",
+        "reviewed_passages": "Reviewed Passages",
+        "relevant_passages": "Relevant Passages",
+        "irrelevant_passages": "Irrelevant Passages",
+        "unreviewed_passages": "Unreviewed Passages",
+        "passage_summary_help": "This category contains {mentions} term mentions across {passages} source passages.",
+        "matched_terms": "Matched terms",
+        "offsets": "Offsets",
+        "legacy_conflict_badge": "Legacy conflict",
         "show_review_required": "Show review-required matches only",
         "include_review_only": "Include review-only matches",
         "review_status": "Review status",
@@ -240,6 +263,118 @@ def status_label(status: str, text: dict[str, str]) -> str:
         "relevant": text["relevant"],
         "irrelevant": text["irrelevant"],
     }.get(status, text["unreviewed"])
+
+
+def get_active_matches(
+    data: dict,
+    category: str,
+    show_review_only: bool = False,
+    include_review_only: bool = False,
+) -> list[dict]:
+    """Filter category matches respecting strict filter order.
+
+    Order:
+    1. Filter out review-only matches unless explicitly included.
+    2. Filter to review-required only if requested.
+    """
+    matches = [m for m in data.get("matches", []) if m["category"] == category]
+    if not include_review_only:
+        matches = [m for m in matches if m.get("count_in_raw_baseline", True)]
+    if show_review_only:
+        matches = [m for m in matches if m.get("requires_review", False)]
+    return matches
+
+
+def group_matches_into_passages(
+    matches: list[dict],
+    category: str,
+) -> list[dict]:
+    """Group active matches into unique passage items keyed by (category, segment_id).
+
+    Preserves original document order.
+    """
+    passages_by_id: dict[str, dict] = OrderedDict()
+    for m in matches:
+        seg_id = m["segment_id"]
+        if seg_id not in passages_by_id:
+            passages_by_id[seg_id] = {
+                "segment_id": seg_id,
+                "category": category,
+                "passage_key": make_passage_key(category, seg_id),
+                "page_number_pdf": m.get("page_number_pdf"),
+                "page_number_printed": m.get("page_number_printed"),
+                "segment_text": m.get("segment_text", ""),
+                "matches": [],
+            }
+        passages_by_id[seg_id]["matches"].append(m)
+
+    result = []
+    for p in passages_by_id.values():
+        counts = Counter(m.get("matched_text") for m in p["matches"])
+        p["term_counts"] = dict(counts)
+        result.append(p)
+    return result
+
+
+def group_passages_by_status(
+    document_id: str,
+    category: str,
+    passages: list[dict],
+    review_store_data: dict,
+    review_status_filter: str = "all",
+) -> tuple[dict[str, list[dict]], dict[str, int]]:
+    """Group active passages by review status using a loaded review store snapshot."""
+    valid_statuses = ("unreviewed", "relevant", "irrelevant")
+    grouped: dict[str, list[dict]] = {status: [] for status in valid_statuses}
+    reviews_dict = review_store_data.get("reviews", {})
+
+    for p in passages:
+        status, diag = resolve_passage_status(
+            category=category,
+            segment_id=p["segment_id"],
+            constituent_matches=p["matches"],
+            reviews_dict=reviews_dict,
+        )
+        p["review_status"] = status
+        p["review_diagnostics"] = diag
+
+        if review_status_filter == "all" or status == review_status_filter:
+            grouped[status].append(p)
+
+    counts = {
+        "unreviewed": len(grouped["unreviewed"]),
+        "relevant": len(grouped["relevant"]),
+        "irrelevant": len(grouped["irrelevant"]),
+        "reviewed": len(grouped["relevant"]) + len(grouped["irrelevant"]),
+        "total": sum(len(items) for items in grouped.values()),
+    }
+    return grouped, counts
+
+
+def group_matches_by_status(
+    doc_id: str,
+    matches: list[dict],
+    review_status_filter: str = "all",
+) -> tuple[dict[str, list[dict]], dict[str, int]]:
+    """Legacy helper: group active matches by review status."""
+    valid_statuses = ("unreviewed", "relevant", "irrelevant")
+    grouped: dict[str, list[dict]] = {status: [] for status in valid_statuses}
+
+    for match in matches:
+        current_status = get_review_status(doc_id, match["match_id"])
+        if current_status not in valid_statuses:
+            current_status = "unreviewed"
+        if review_status_filter == "all" or current_status == review_status_filter:
+            grouped[current_status].append(match)
+
+    counts = {
+        "unreviewed": len(grouped["unreviewed"]),
+        "relevant": len(grouped["relevant"]),
+        "irrelevant": len(grouped["irrelevant"]),
+        "reviewed": len(grouped["relevant"]) + len(grouped["irrelevant"]),
+        "total": sum(len(items) for items in grouped.values()),
+    }
+    return grouped, counts
 
 
 def escape_markdown_label(value: Any) -> str:
@@ -1096,25 +1231,32 @@ def render_category_metrics(
 
 
 def render_human_verification(
-    doc_id: str,
-    data: dict,
-    category: str,
+    review_counts: dict[str, int],
+    total_active_mentions: int,
     text: dict[str, str],
 ) -> None:
-    """Render the live review summary without changing stored review state."""
-    rev_summary = get_review_summary(doc_id, data)
-    cat_rev = rev_summary["categories"].get(category, {})
-
+    """Render the live review summary for active passages."""
     st.subheader(text["human_verification"])
     v1, v2, v3, v4 = st.columns(4)
     with v1:
-        render_metric_card(text["reviewed"], cat_rev.get("reviewed", 0), tone="primary")
+        render_metric_card(
+            text["reviewed_passages"],
+            f"{review_counts.get('reviewed', 0)} / {review_counts.get('total', 0)}",
+            tone="primary",
+        )
     with v2:
-        render_metric_card(text["relevant"], cat_rev.get("relevant", 0), tone="positive")
+        render_metric_card(text["relevant_passages"], review_counts.get("relevant", 0), tone="positive")
     with v3:
-        render_metric_card(text["irrelevant"], cat_rev.get("irrelevant", 0), tone="negative")
+        render_metric_card(text["irrelevant_passages"], review_counts.get("irrelevant", 0), tone="negative")
     with v4:
-        render_metric_card(text["unreviewed"], cat_rev.get("unreviewed", 0), tone="neutral")
+        render_metric_card(text["unreviewed_passages"], review_counts.get("unreviewed", 0), tone="neutral")
+
+    st.caption(
+        text["passage_summary_help"].format(
+            passages=review_counts.get("total", 0),
+            mentions=total_active_mentions,
+        )
+    )
 
 
 def render_ranking(data: dict, language: str, text: dict[str, str]) -> None:
@@ -1238,40 +1380,51 @@ def render_pagination_controls(
             )
 
 
-def render_review_card(
+def render_passage_card(
     doc_id: str,
-    match: dict,
+    passage: dict,
     current_status: str,
     text: dict[str, str],
 ) -> None:
-    """Render one board card without introducing a second review-state system."""
-    mid = match["match_id"]
-    pdf_p = match.get("page_number_pdf")
-    printed_p = match.get("page_number_printed")
-    matched = match.get("matched_text", "")
-    preview = passage_preview(match.get("segment_text", ""))
+    """Render one unique passage card with compact term badges and full traceability."""
+    pkey = passage["passage_key"]
+    seg_id = passage["segment_id"]
+    cat = passage["category"]
+    pdf_p = passage.get("page_number_pdf")
+    printed_p = passage.get("page_number_printed")
+    segment_text = passage.get("segment_text", "")
+    preview = passage_preview(segment_text)
     display_status = status_label(current_status, text)
-    is_active = st.session_state.get("active_passage_id") == mid
+    is_active = st.session_state.get("active_passage_id") == pkey
+    diag = passage.get("review_diagnostics", {})
+
+    term_counts = passage.get("term_counts", {})
+    terms_summary = ", ".join(
+        f"{term} ({cnt})" if cnt > 1 else str(term)
+        for term, cnt in term_counts.items()
+    )
+
+    safe_id = f"{cat}__{seg_id}".replace(" ", "_")
 
     chevron = "▾" if is_active else "▸"
     card_label = (
         f"{chevron} PDF p.{escape_markdown_label(pdf_p)}\n\n"
-        f"**{escape_markdown_label(matched or '—')}**\n\n"
+        f"**{escape_markdown_label(terms_summary or '—')}**\n\n"
         f"{escape_markdown_label(preview or '—')}"
     )
 
     with st.container(
         border=True,
         # "open_" only changes the CSS hook so an expanded card can be styled.
-        key=f"review_card_{current_status}_{'open_' if is_active else ''}{mid}",
+        key=f"review_card_{current_status}_{'open_' if is_active else ''}{safe_id}",
     ):
         st.button(
             card_label,
-            key=f"card_toggle_{mid}",
+            key=f"card_toggle_{safe_id}",
             type="tertiary",
             width="stretch",
             on_click=toggle_active_passage,
-            args=(mid,),
+            args=(pkey,),
         )
 
         if not is_active:
@@ -1291,12 +1444,13 @@ def render_review_card(
         # The full source paragraph stays verbatim and visually dominant.
         st.markdown(
             f'<div class="passage-text {status_tone(current_status)}">'
-            f'{escape(str(match.get("segment_text", "")))}</div>',
+            f'{escape(str(segment_text))}</div>',
             unsafe_allow_html=True,
         )
+
         st.markdown(
-            f'<p class="matched-term-line">{escape(text["matched_term"])}: '
-            f'<span class="matched-term">{escape(str(matched))}</span></p>',
+            f'<p class="matched-term-line">{escape(text["matched_terms"])} ({len(passage["matches"])}): '
+            f'<span class="matched-term">{escape(str(terms_summary))}</span></p>',
             unsafe_allow_html=True,
         )
 
@@ -1304,24 +1458,29 @@ def render_review_card(
             f'<span class="status-badge {status_tone(current_status)}">'
             f'{escape(display_status)}</span>'
         )
-        if match.get("requires_review", False):
+        if any(m.get("requires_review", False) for m in passage["matches"]):
             badges += (
                 f'<span class="status-badge warning">'
                 f'{escape(text["requires_review"])}</span>'
             )
+        if diag.get("source") == "legacy_conflict":
+            badges += (
+                f'<span class="status-badge warning">'
+                f'{escape(text["legacy_conflict_badge"])}</span>'
+            )
         st.markdown(badges, unsafe_allow_html=True)
 
-        # Existing review_store actions and stored status values remain unchanged.
+        # Review action buttons
         b1, b2, b3 = st.columns(3)
         with b1:
             if st.button(
                 text["relevant"],
-                key=f"relevant_{mid}",
+                key=f"relevant_{safe_id}",
                 type="primary",
                 width="stretch",
             ):
                 try:
-                    set_review_status(doc_id, mid, "relevant")
+                    set_passage_review_status(doc_id, cat, seg_id, "relevant")
                 except Exception as exc:
                     st.error(f"{text['error_setting_review']}: {exc}")
                 else:
@@ -1329,11 +1488,11 @@ def render_review_card(
         with b2:
             if st.button(
                 text["irrelevant"],
-                key=f"irrelevant_{mid}",
+                key=f"irrelevant_{safe_id}",
                 width="stretch",
             ):
                 try:
-                    set_review_status(doc_id, mid, "irrelevant")
+                    set_passage_review_status(doc_id, cat, seg_id, "irrelevant")
                 except Exception as exc:
                     st.error(f"{text['error_setting_review']}: {exc}")
                 else:
@@ -1341,88 +1500,107 @@ def render_review_card(
         with b3:
             if st.button(
                 text["clear"],
-                key=f"clear_{mid}",
+                key=f"clear_{safe_id}",
                 type="tertiary",
                 width="stretch",
             ):
                 try:
-                    clear_review(doc_id, mid)
+                    clear_passage_review(doc_id, cat, seg_id, passage["matches"])
                 except Exception as exc:
                     st.error(f"{text['error_clearing_review']}: {exc}")
                 else:
                     st.rerun()
 
-        is_tech_open = st.session_state.get(f"technical_details_{mid}", False)
+        # Collapsible technical details with individual match traceability
+        is_tech_open = st.session_state.get(f"technical_details_{safe_id}", False)
         tech_chevron = "▾" if is_tech_open else "▸"
         show_technical = st.toggle(
             f"{tech_chevron} {text['technical_details']}",
             value=False,
-            key=f"technical_details_{mid}",
+            key=f"technical_details_{safe_id}",
         )
         if show_technical:
-            technical_rows: list[tuple[str, Any]] = [(text["pdf_page"], pdf_p)]
+            tech_rows: list[tuple[str, Any]] = [(text["pdf_page"], pdf_p)]
             if printed_p:
-                technical_rows.append((text["printed_page"], printed_p))
-            technical_rows.extend([
-                ("Segment ID", match.get("segment_id", "—")),
-                ("Pattern ID", match.get("pattern_id", "—")),
-                ("Tier", match.get("tier", "—")),
-                (text["requires_review"], match.get("requires_review", False)),
-                (text["in_raw_baseline"], match.get("count_in_raw_baseline", False)),
+                tech_rows.append((text["printed_page"], printed_p))
+            tech_rows.extend([
+                ("Segment ID", seg_id),
+                ("Category", cat),
+                ("Passage Key", pkey),
+                ("Matches in Passage", len(passage["matches"])),
+                ("Review Source", diag.get("source", "passage")),
                 (text["status"], display_status),
             ])
-            technical_html = "".join(
+            tech_html = "".join(
                 f'<div class="technical-label">{escape(str(label))}</div>'
                 f'<div class="technical-value">{escape(str(value))}</div>'
-                for label, value in technical_rows
+                for label, value in tech_rows
             )
-            with st.container(border=True, key=f"technical_panel_{mid}"):
+
+            match_rows = []
+            for idx, m in enumerate(passage["matches"], start=1):
+                offsets_str = f"{m.get('char_start', 0)}–{m.get('char_end', 0)}"
+                match_rows.append([
+                    f"#{idx}",
+                    m.get("pattern_id", "—"),
+                    m.get("matched_text", "—"),
+                    offsets_str,
+                    m.get("tier", "—"),
+                    "Yes" if m.get("requires_review") else "No",
+                    "Yes" if m.get("count_in_raw_baseline", True) else "No",
+                ])
+
+            with st.container(border=True, key=f"technical_panel_{safe_id}"):
                 st.markdown(
-                    f'<div class="technical-grid">{technical_html}</div>',
+                    f'<div class="technical-grid">{tech_html}</div>',
                     unsafe_allow_html=True,
                 )
+                st.write("")
+                render_light_table(
+                    ["#", "Pattern", text["matched_terms"], text["offsets"], "Tier", text["requires_review"], text["in_raw_baseline"]],
+                    match_rows,
+                )
+
+
+def render_review_card(
+    doc_id: str,
+    match_or_passage: dict,
+    current_status: str,
+    text: dict[str, str],
+) -> None:
+    """Backward compatibility wrapper delegating to render_passage_card."""
+    if "passage_key" in match_or_passage:
+        render_passage_card(doc_id, match_or_passage, current_status, text)
+    else:
+        # Wrap single match as single-match passage
+        passage = {
+            "segment_id": match_or_passage.get("segment_id", "—"),
+            "category": match_or_passage.get("category", "—"),
+            "passage_key": make_passage_key(match_or_passage.get("category", ""), match_or_passage.get("segment_id", "")),
+            "page_number_pdf": match_or_passage.get("page_number_pdf"),
+            "page_number_printed": match_or_passage.get("page_number_printed"),
+            "segment_text": match_or_passage.get("segment_text", ""),
+            "matches": [match_or_passage],
+            "term_counts": {match_or_passage.get("matched_text", ""): 1},
+        }
+        render_passage_card(doc_id, passage, current_status, text)
 
 
 def render_passages(
     doc_id: str,
-    data: dict,
     category: str,
-    show_review_only: bool,
-    include_review_only: bool,
-    review_status_filter: str,
+    grouped_passages: dict[str, list[dict]],
     language: str,
     text: dict[str, str],
 ) -> None:
     st.subheader(text["source_passages"])
 
-    matches = [m for m in data.get("matches", []) if m["category"] == category]
-
-    if show_review_only:
-        matches = [m for m in matches if m.get("requires_review", False)]
-    elif not include_review_only:
-        matches = [m for m in matches if m.get("count_in_raw_baseline", True)]
-
-    valid_statuses = ("unreviewed", "relevant", "irrelevant")
-    matches_with_status: list[tuple[dict, str]] = []
-    for match in matches:
-        current_status = get_review_status(doc_id, match["match_id"])
-        if current_status not in valid_statuses:
-            current_status = "unreviewed"
-        if review_status_filter == "all" or current_status == review_status_filter:
-            matches_with_status.append((match, current_status))
-
-    if not matches_with_status:
+    grouped = grouped_passages
+    total_active = sum(len(items) for items in grouped.values())
+    if total_active == 0:
         st.info(text["no_passages"])
         st.session_state["active_passage_id"] = None
         return
-
-    visible_ids = {match["match_id"] for match, _ in matches_with_status}
-    if st.session_state.get("active_passage_id") not in visible_ids:
-        st.session_state["active_passage_id"] = None
-
-    grouped: dict[str, list[dict]] = {status: [] for status in valid_statuses}
-    for match, current_status in matches_with_status:
-        grouped[current_status].append(match)
 
     columns_config = (
         (
@@ -1445,6 +1623,27 @@ def render_passages(
         ),
     )
 
+    # Collect visible page passage keys across all columns to safely clean up active_passage_id
+    visible_page_keys = set()
+    columns_page_passages = {}
+
+    for status, label, tone, empty_text in columns_config:
+        passages = grouped[status]
+        total_items = len(passages)
+        current_page, total_pages = get_page_number(
+            doc_id, category, status, total_items
+        )
+        start_idx = (current_page - 1) * PAGE_SIZE
+        end_idx = start_idx + PAGE_SIZE
+        page_items = passages[start_idx:end_idx]
+        columns_page_passages[status] = (page_items, current_page, total_pages)
+        for p in page_items:
+            visible_page_keys.add(p["passage_key"])
+
+    # Safe active card cleanup if open card is no longer on visible page
+    if st.session_state.get("active_passage_id") not in visible_page_keys:
+        st.session_state["active_passage_id"] = None
+
     with st.container(key="review_board"):
         board_columns = st.columns(3, gap="medium")
         for column, (status, label, tone, empty_text) in zip(
@@ -1454,9 +1653,7 @@ def render_passages(
         ):
             passages = grouped[status]
             total_items = len(passages)
-            current_page, total_pages = get_page_number(
-                doc_id, category, status, total_items
-            )
+            page_passages, current_page, total_pages = columns_page_passages[status]
             page_key = f"page_{doc_id}_{category}_{status}"
 
             with column:
@@ -1474,12 +1671,8 @@ def render_passages(
                     )
                     continue
 
-                start_idx = (current_page - 1) * PAGE_SIZE
-                end_idx = start_idx + PAGE_SIZE
-                page_passages = passages[start_idx:end_idx]
-
-                for match in page_passages:
-                    render_review_card(doc_id, match, status, text)
+                for passage in page_passages:
+                    render_passage_card(doc_id, passage, status, text)
 
                 if total_pages > 1:
                     render_pagination_controls(
@@ -1716,18 +1909,48 @@ def main() -> None:
 
     st.write("")
 
+    # Load review store snapshot ONCE per rerun
+    review_store_data = load_reviews(doc_id)
+
+    # 1. Filter matches according to strict filter order
+    active_matches = get_active_matches(
+        data,
+        category,
+        show_review_only=show_review_only,
+        include_review_only=include_review_only,
+    )
+    total_active_mentions = len(active_matches)
+
+    # 2. Group active matches into unique passages (1 passage = 1 card)
+    active_passages = group_matches_into_passages(active_matches, category)
+
+    # 3. Resolve passage status from review snapshot
+    grouped_passages, review_counts = group_passages_by_status(
+        doc_id,
+        category,
+        active_passages,
+        review_store_data,
+        review_status_filter=review_status_filter,
+    )
+
     # ---- Human verification ----
     with st.container(border=True):
-        render_human_verification(doc_id, data, category, text)
+        render_human_verification(
+            review_counts,
+            total_active_mentions,
+            text,
+        )
 
     st.write("")
 
     # ---- Source passages with VERIFY buttons ----
     with st.container(border=True):
         render_passages(
-            doc_id, data, category,
-            show_review_only, include_review_only, review_status_filter,
-            language, text,
+            doc_id,
+            category,
+            grouped_passages,
+            language,
+            text,
         )
 
     st.write("")
