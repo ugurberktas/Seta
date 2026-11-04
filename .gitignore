@@ -41,4 +41,6 @@ data/processed/*
 
 # Runtime review decisions (keep folder via .gitkeep)
 data/reviews/*.json
+data/reviews/.locks/
+data/reviews/*.lock
 !data/reviews/.gitkeep

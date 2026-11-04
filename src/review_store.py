@@ -24,6 +24,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import db_review_store
+from db_review_store import DatabaseStorageError
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -32,10 +35,42 @@ DEFAULT_REVIEWS_DIR = Path(__file__).parent.parent / "data" / "reviews"
 PROCESSED_DIR = Path(__file__).parent.parent / "data" / "processed"
 
 _custom_reviews_dir: Path | None = None
+_custom_database_url: str | None = None
 
 ALLOWED_STATUSES = {"unreviewed", "relevant", "irrelevant"}
 SCHEMA_VERSION = 1
 DEFAULT_SCOPE = "core_body"
+
+
+# ---------------------------------------------------------------------------
+# Backend Selection & Configuration
+# ---------------------------------------------------------------------------
+
+def get_database_url() -> str | None:
+    """Return configured DATABASE_URL from custom override, env, or Streamlit secrets."""
+    if _custom_database_url is not None:
+        return _custom_database_url
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url:
+        return env_url
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "DATABASE_URL" in st.secrets:
+            return str(st.secrets["DATABASE_URL"])
+    except Exception:
+        pass
+    return None
+
+
+def set_database_url(url: str | None) -> None:
+    """Configure or override the active database URL for testing/isolation."""
+    global _custom_database_url
+    _custom_database_url = url
+
+
+def get_storage_backend() -> str:
+    """Return 'postgres' if DATABASE_URL is configured, else 'json'."""
+    return "postgres" if get_database_url() else "json"
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +164,12 @@ def load_reviews(document_id: str) -> dict:
             "reviews": { ... }
         }
     If the file does not exist, returns an empty-reviews structure.
+    Uses PostgreSQL if DATABASE_URL is configured, else local JSON.
     """
+    db_url = get_database_url()
+    if db_url:
+        return db_review_store.load_reviews(db_url, document_id)
+
     path = _review_path(document_id)
     if not path.exists():
         return _empty_store(document_id)
@@ -317,9 +357,17 @@ def set_passage_review_status(
 ) -> None:
     """Set the review status for (document_id, category, segment_id).
 
-    Concurrency-safe: acquires a document lock during read-modify-write.
+    Uses PostgreSQL atomic UPSERT if DATABASE_URL is configured,
+    else JSON backend with document lock.
     """
     _validate_status(status)
+    db_url = get_database_url()
+    if db_url:
+        db_review_store.set_passage_review_status(
+            db_url, document_id, category, segment_id, status, note
+        )
+        return
+
     passage_key = make_passage_key(category, segment_id)
 
     with document_lock(document_id):
@@ -343,9 +391,17 @@ def clear_passage_review(
 ) -> None:
     """Clear review for (document_id, category, segment_id).
 
-    Explicitly sets the passage status to 'unreviewed' so that legacy
+    In PostgreSQL, deletes the row.
+    In JSON, explicitly sets the passage status to 'unreviewed' so that legacy
     match-level records do not re-inherit a status.
     """
+    db_url = get_database_url()
+    if db_url:
+        db_review_store.clear_passage_review(
+            db_url, document_id, category, segment_id
+        )
+        return
+
     set_passage_review_status(document_id, category, segment_id, "unreviewed")
 
 
@@ -369,13 +425,18 @@ def set_review_status(
     note: str = "",
     scope: str = DEFAULT_SCOPE,
 ) -> None:
-    """Set the review status for *match_id*.
-
-    Concurrency-safe: acquires a document lock during read-modify-write.
-    """
+    """Set the review status for *match_id*."""
     _validate_status(status)
     matches_data = _load_matches_data(document_id, scope)
     validate_match_id(document_id, match_id, matches_data)
+
+    db_url = get_database_url()
+    if db_url:
+        match_obj = next(m for m in matches_data["matches"] if m["match_id"] == match_id)
+        db_review_store.set_passage_review_status(
+            db_url, document_id, match_obj["category"], match_obj["segment_id"], status, note
+        )
+        return
 
     with document_lock(document_id):
         data = load_reviews(document_id)
@@ -393,6 +454,16 @@ def set_review_status(
 
 def clear_review(document_id: str, match_id: str) -> None:
     """Remove the review record for *match_id* (effective status → unreviewed)."""
+    db_url = get_database_url()
+    if db_url:
+        matches_data = _load_matches_data(document_id)
+        match_obj = next((m for m in matches_data.get("matches", []) if m["match_id"] == match_id), None)
+        if match_obj:
+            db_review_store.clear_passage_review(
+                db_url, document_id, match_obj["category"], match_obj["segment_id"]
+            )
+        return
+
     with document_lock(document_id):
         data = load_reviews(document_id)
         data.setdefault("reviews", {})

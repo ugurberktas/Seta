@@ -2,3 +2,4 @@ PyMuPDF
 pandas
 streamlit
 pytest
+psycopg2-binary
