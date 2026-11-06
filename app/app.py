@@ -26,6 +26,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from auth import (  # noqa: E402
+    are_credentials_configured,
+    check_login_lockout,
+    format_remaining_time,
+    is_authenticated,
+    logout,
+    record_login_failure,
+    record_login_success,
+    record_review_action,
+    verify_credentials,
+)
 from review_store import (  # noqa: E402
     get_review_status,
     set_review_status,
@@ -143,6 +154,17 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "page_prefix": "Sayfa",
         "prev_page": "< Önceki",
         "next_page": "Sonraki >",
+        "login_title": "Security Research Assistant",
+        "login_subtitle": "Güvenlik Araştırmaları Asistanı Girişi",
+        "username": "Kullanıcı Adı",
+        "password": "Şifre",
+        "sign_in_button": "Sign in / Giriş yap",
+        "invalid_credentials": "Kullanıcı adı veya şifre hatalı.",
+        "config_missing": "Yapılandırma hatası: APP_USERNAME ve APP_PASSWORD ortam değişkenlerinde veya Streamlit gizli anahtarlarında (secrets) tanımlanmalıdır.",
+        "login_locked": "Çok fazla başarısız giriş denemesi. Lütfen {time_left} sonra tekrar deneyin.",
+        "logout": "Çıkış Yap",
+        "logged_in_as": "Giriş yapıldı:",
+        "review_rate_limit_warning": "Çok fazla inceleme işlemi yapıldı. Lütfen {seconds} saniye bekleyin.",
     },
     "en": {
         "eyebrow": "Research tool",
@@ -215,6 +237,17 @@ UI_TEXT: dict[str, dict[str, str]] = {
         "page_prefix": "Page",
         "prev_page": "< Previous",
         "next_page": "Next >",
+        "login_title": "Security Research Assistant",
+        "login_subtitle": "Security Research Assistant Login",
+        "username": "Username",
+        "password": "Password",
+        "sign_in_button": "Sign in / Giriş yap",
+        "invalid_credentials": "Invalid username or password.",
+        "config_missing": "Configuration error: APP_USERNAME and APP_PASSWORD must be configured in environment variables or Streamlit secrets.",
+        "login_locked": "Too many failed login attempts. Please try again in {time_left}.",
+        "logout": "Sign out",
+        "logged_in_as": "Signed in as:",
+        "review_rate_limit_warning": "Too many review actions. Please wait {seconds} seconds before trying again.",
     },
 }
 
@@ -1472,7 +1505,7 @@ def render_passage_card(
             )
         st.markdown(badges, unsafe_allow_html=True)
 
-        # Review action buttons
+        # Review action buttons with rate-limiting throttle (30 actions / 60s)
         b1, b2, b3 = st.columns(3)
         with b1:
             if st.button(
@@ -1481,24 +1514,32 @@ def render_passage_card(
                 type="primary",
                 width="stretch",
             ):
-                try:
-                    set_passage_review_status(doc_id, cat, seg_id, "relevant")
-                except Exception as exc:
-                    st.error(f"{text['error_setting_review']}: {exc}")
+                allowed, retry_after = record_review_action(st.session_state)
+                if not allowed:
+                    st.warning(text["review_rate_limit_warning"].format(seconds=retry_after))
                 else:
-                    st.rerun()
+                    try:
+                        set_passage_review_status(doc_id, cat, seg_id, "relevant")
+                    except Exception as exc:
+                        st.error(f"{text['error_setting_review']}: {exc}")
+                    else:
+                        st.rerun()
         with b2:
             if st.button(
                 text["irrelevant"],
                 key=f"irrelevant_{safe_id}",
                 width="stretch",
             ):
-                try:
-                    set_passage_review_status(doc_id, cat, seg_id, "irrelevant")
-                except Exception as exc:
-                    st.error(f"{text['error_setting_review']}: {exc}")
+                allowed, retry_after = record_review_action(st.session_state)
+                if not allowed:
+                    st.warning(text["review_rate_limit_warning"].format(seconds=retry_after))
                 else:
-                    st.rerun()
+                    try:
+                        set_passage_review_status(doc_id, cat, seg_id, "irrelevant")
+                    except Exception as exc:
+                        st.error(f"{text['error_setting_review']}: {exc}")
+                    else:
+                        st.rerun()
         with b3:
             if st.button(
                 text["clear"],
@@ -1506,12 +1547,16 @@ def render_passage_card(
                 type="tertiary",
                 width="stretch",
             ):
-                try:
-                    clear_passage_review(doc_id, cat, seg_id, passage["matches"])
-                except Exception as exc:
-                    st.error(f"{text['error_clearing_review']}: {exc}")
+                allowed, retry_after = record_review_action(st.session_state)
+                if not allowed:
+                    st.warning(text["review_rate_limit_warning"].format(seconds=retry_after))
                 else:
-                    st.rerun()
+                    try:
+                        clear_passage_review(doc_id, cat, seg_id, passage["matches"])
+                    except Exception as exc:
+                        st.error(f"{text['error_clearing_review']}: {exc}")
+                    else:
+                        st.rerun()
 
         # Collapsible technical details with individual match traceability
         is_tech_open = st.session_state.get(f"technical_details_{safe_id}", False)
@@ -1786,6 +1831,79 @@ def render_comparison(
 
 
 # ---------------------------------------------------------------------------
+# Login UI & Auth Gate
+# ---------------------------------------------------------------------------
+
+def render_login_screen(text: dict[str, str], language: str) -> None:
+    """Render minimal login screen with username, masked password, and sign-in button."""
+    is_locked, remaining_seconds = check_login_lockout(st.session_state)
+
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        c_lang_l, c_lang_r = st.columns([2, 1])
+        with c_lang_r:
+            st.selectbox(
+                "Dil / Language",
+                options=["Türkçe", "English"],
+                index=0 if language == "tr" else 1,
+                key="ui_language",
+                label_visibility="collapsed",
+            )
+
+        st.markdown(
+            f"""
+            <div style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 2rem; margin-top: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                <h2 style="color: #0F172A; margin: 0 0 0.5rem 0; font-family: 'Space Grotesk', sans-serif;">{escape(text['login_title'])}</h2>
+                <p style="color: #475569; font-size: 0.95rem; margin-bottom: 1.5rem;">{escape(text['login_subtitle'])}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if is_locked:
+            formatted_time = format_remaining_time(remaining_seconds, language)
+            st.error(text["login_locked"].format(time_left=formatted_time))
+            return
+
+        with st.form("login_form", clear_on_submit=False):
+            username_input = st.text_input(
+                text["username"],
+                key="login_username_input",
+                placeholder=text["username"],
+            )
+            password_input = st.text_input(
+                text["password"],
+                type="password",
+                key="login_password_input",
+                placeholder=text["password"],
+            )
+            submit = st.form_submit_button(
+                text["sign_in_button"],
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submit:
+            if not username_input or not password_input:
+                is_now_locked, lock_seconds = record_login_failure(st.session_state)
+                if is_now_locked:
+                    formatted_time = format_remaining_time(lock_seconds, language)
+                    st.error(text["login_locked"].format(time_left=formatted_time))
+                else:
+                    st.error(text["invalid_credentials"])
+            elif verify_credentials(username_input, password_input):
+                record_login_success(st.session_state, username=username_input.strip())
+                st.rerun()
+            else:
+                is_now_locked, lock_seconds = record_login_failure(st.session_state)
+                if is_now_locked:
+                    formatted_time = format_remaining_time(lock_seconds, language)
+                    st.error(text["login_locked"].format(time_left=formatted_time))
+                else:
+                    st.error(text["invalid_credentials"])
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1797,15 +1915,35 @@ def main() -> None:
     )
     apply_ui_styles()
 
+    language_name = st.session_state.get("ui_language", "Türkçe")
+    language = "tr" if language_name == "Türkçe" else "en"
+    text = UI_TEXT[language]
+
+    # 1. Fail-closed configuration check
+    if not are_credentials_configured():
+        st.error(text["config_missing"])
+        st.stop()
+
+    # 2. Authentication Gate: If not authenticated, render login screen only
+    if not is_authenticated(st.session_state):
+        render_login_screen(text, language)
+        st.stop()
+
+    # 3. Authenticated application view
     with st.sidebar:
         render_sidebar_label("Language / Dil")
         language_name = st.selectbox(
             "Language / Dil",
             options=["Türkçe", "English"],
-            index=0,
+            index=0 if language == "tr" else 1,
             key="ui_language",
             label_visibility="collapsed",
         )
+
+        st.caption(f"{text['logged_in_as']} **{st.session_state.get('auth_user', '')}**")
+        if st.button(text["logout"], key="logout_btn", type="secondary", use_container_width=True):
+            logout(st.session_state)
+            st.rerun()
 
     language = "tr" if language_name == "Türkçe" else "en"
     text = UI_TEXT[language]
