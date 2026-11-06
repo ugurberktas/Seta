@@ -28,12 +28,22 @@ The baseline uses a compact English dictionary with deterministic regular-expres
 
 This PoC does not reproduce SETA's original multilingual dictionary exactly. Its current Russia-frequency ordering is Latvia > Netherlands > United Kingdom; this is a result of the compact PoC methodology and is not a claim that the source report's full ordering was reproduced.
 
+## Configuration
+
+The application requires authentication credentials configured via environment variables or Streamlit secrets (`.streamlit/secrets.toml`):
+
+- `APP_USERNAME` — application login username
+- `APP_PASSWORD` — application login password
+- `DATABASE_URL` — (optional) remote PostgreSQL connection string for persistent review storage
+
 ## Local run
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export APP_USERNAME="your-username"
+export APP_PASSWORD="your-password"
 streamlit run app/app.py
 ```
 

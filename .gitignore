@@ -24,6 +24,8 @@ htmlcov/
 
 # Streamlit
 .streamlit/
+.streamlit/secrets.toml
+secrets.toml
 
 # Raw data — PDFs are not committed (large files)
 data/raw/*.pdf
