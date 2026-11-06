@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Research Assistant</title>
+  
+  <!-- Modern Clean Design Stylesheets -->
+  <link rel="stylesheet" href="./css/tokens.css">
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- 1. AUTHENTICATION VIEW                                      -->
+  <!-- ============================================================ -->
+  <div id="auth-view">
+    <div class="auth-card">
+      <div class="auth-header">
+        <span class="auth-badge">Intelligence Analytics</span>
+        <h1 class="auth-title">Security Research Assistant</h1>
+        <p class="auth-subtitle">Ulusal güvenlik belgelerinde tehdit analizi ve kaynak doğrulama</p>
+      </div>
+
+      <div id="login-alert" class="alert alert-danger hidden" role="alert"></div>
+
+      <form id="login-form" class="auth-form" autocomplete="on">
+        <div class="form-group">
+          <label for="login-username" class="form-label" data-i18n="username">Kullanıcı Adı</label>
+          <input
+            type="text"
+            id="login-username"
+            name="username"
+            class="form-control"
+            required
+            autocomplete="username"
+            placeholder="admin"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="login-password" class="form-label" data-i18n="password">Şifre</label>
+          <input
+            type="password"
+            id="login-password"
+            name="password"
+            class="form-control"
+            required
+            autocomplete="current-password"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">
+          Giriş Yap / Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 2. MAIN APPLICATION DASHBOARD VIEW (Shown after auth)        -->
+  <!-- ============================================================ -->
+  <div id="app-view" class="hidden">
+    
+    <!-- Sidebar Controls -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-primary);">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>SRA Dashboard</span>
+        </div>
+      </div>
+
+      <!-- Language Switch -->
+      <div class="sidebar-section">
+        <label class="sidebar-section-title" for="language-select" data-i18n="language_label">Dil / Language</label>
+        <select id="language-select" class="form-control">
+          <option value="tr">Türkçe (TR)</option>
+          <option value="en">English (EN)</option>
+        </select>
+      </div>
+
+      <!-- Document Select -->
+      <div class="sidebar-section">
+        <label class="sidebar-section-title" for="document-select" data-i18n="document_label">Belge</label>
+        <select id="document-select" class="form-control">
+          <!-- Populated dynamically via API -->
+        </select>
+      </div>
+
+      <!-- Category Select -->
+      <div class="sidebar-section">
+        <label class="sidebar-section-title" for="category-select" data-i18n="category_label">Kategori</label>
+        <select id="category-select" class="form-control">
+          <option value="Russia">Russia</option>
+          <option value="China">China</option>
+          <option value="Cyber">Cyber</option>
+          <option value="Hybrid">Hybrid</option>
+          <option value="Migration">Migration</option>
+        </select>
+      </div>
+
+      <!-- Filters -->
+      <div class="sidebar-section">
+        <label class="sidebar-section-title" data-i18n="filters_label">Filtreler</label>
+        <div class="sidebar-checkbox-group">
+          <label class="checkbox-label" for="filter-review-only">
+            <input type="checkbox" id="filter-review-only" />
+            <span data-i18n="show_review_required">Yalnızca inceleme gerektirenler</span>
+          </label>
+          <label class="checkbox-label" for="filter-include-baseline">
+            <input type="checkbox" id="filter-include-baseline" />
+            <span data-i18n="include_review_only">Yalnızca inceleme amaçlıları dahil et</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer / Auth state -->
+      <div class="sidebar-footer">
+        <div class="user-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="7" r="4"/>
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          </svg>
+          <span data-i18n="logged_in_as">Giriş yapan:</span>
+          <strong id="current-user-name" style="color: #FFFFFF;"></strong>
+        </div>
+        <button id="logout-btn" class="btn btn-secondary btn-sm" data-i18n="sign_out" style="width: 100%;">
+          Çıkış Yap
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Ephemeral Alert Banner (e.g. rate limit or network warning) -->
+      <div id="board-alert" class="alert hidden" role="alert"></div>
+
+      <!-- 1. Document Overview Cards -->
+      <section id="document-overview-container" aria-label="Document Overview"></section>
+
+      <!-- 2. Category Metrics Banner -->
+      <section id="category-metrics-container" aria-label="Category Metrics"></section>
+
+      <!-- 3. Category Frequency Bar Chart -->
+      <section id="category-chart-container" aria-label="Category Frequency Chart"></section>
+
+      <!-- 4. Human Verification Summary Cards -->
+      <section id="human-verification-container" aria-label="Human Verification Summary"></section>
+
+      <!-- 5. Source Passages Review Board (3 Columns) -->
+      <section id="source-passages-container" aria-label="Source Passages Review Board"></section>
+
+      <!-- 6. Cross-Document Comparison Bar Chart -->
+      <section id="cross-doc-chart-container" aria-label="Cross-Document Comparison Chart"></section>
+    </main>
+
+  </div>
+
+  <!-- Assets & Modules -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
+

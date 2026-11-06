@@ -1,5 +1,8 @@
 PyMuPDF
 pandas
-streamlit
 pytest
 psycopg2-binary
+fastapi
+uvicorn
+itsdangerous
+httpx

@@ -27,19 +27,17 @@ if str(PROJECT_ROOT / "src") not in sys.path:
 
 import pytest
 
-from app.app import (
-    get_active_matches,
-    group_matches_into_passages,
-    group_passages_by_status,
-    load_analysis,
-)
 from review_store import (
     clear_passage_review,
     clear_review,
+    get_active_matches,
     get_passage_review_status,
     get_review_status,
     get_review_summary,
     get_reviews_dir,
+    group_matches_into_passages,
+    group_passages_by_status,
+    load_analysis,
     load_reviews,
     make_passage_key,
     normalize_status,

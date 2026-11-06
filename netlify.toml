@@ -1,0 +1,27 @@
+[build]
+  publish = "frontend"
+
+# Security Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self';"
+
+# Redirect all /api/* requests to the deployed FastAPI backend
+# Replace with the actual production backend URL once deployed on Render/Cloud
+[[redirects]]
+  from = "/api/*"
+  to = "https://placeholder-fastapi-backend.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

@@ -15,6 +15,7 @@ A record absent from the review file has effective status "unreviewed".
 
 from __future__ import annotations
 
+from collections import Counter, OrderedDict
 import fcntl
 import json
 import os
@@ -47,18 +48,12 @@ DEFAULT_SCOPE = "core_body"
 # ---------------------------------------------------------------------------
 
 def get_database_url() -> str | None:
-    """Return configured DATABASE_URL from custom override, env, or Streamlit secrets."""
+    """Return configured DATABASE_URL from custom override or environment."""
     if _custom_database_url is not None:
         return _custom_database_url
     env_url = os.environ.get("DATABASE_URL")
     if env_url:
-        return env_url
-    try:
-        import streamlit as st
-        if hasattr(st, "secrets") and "DATABASE_URL" in st.secrets:
-            return str(st.secrets["DATABASE_URL"])
-    except Exception:
-        pass
+        return env_url.strip()
     return None
 
 
@@ -598,3 +593,95 @@ def get_review_summary(
             "categories": categories_passages,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Shared Analysis & Passage Grouping Functions
+# ---------------------------------------------------------------------------
+
+def load_analysis(document_id: str) -> dict[str, Any] | None:
+    """Load threat-match JSON for a document. Returns None if missing."""
+    path = PROCESSED_DIR / f"{document_id}_{DEFAULT_SCOPE}_threat_matches.json"
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def get_active_matches(
+    data: dict,
+    category: str,
+    show_review_only: bool = False,
+    include_review_only: bool = False,
+) -> list[dict]:
+    """Filter category matches respecting strict filter order."""
+    matches = [m for m in data.get("matches", []) if m["category"] == category]
+    if not include_review_only:
+        matches = [m for m in matches if m.get("count_in_raw_baseline", True)]
+    if show_review_only:
+        matches = [m for m in matches if m.get("requires_review", False)]
+    return matches
+
+
+def group_matches_into_passages(
+    matches: list[dict],
+    category: str,
+) -> list[dict]:
+    """Group active matches into unique passage items keyed by (category, segment_id)."""
+    passages_by_id: dict[str, dict] = OrderedDict()
+    for m in matches:
+        seg_id = m["segment_id"]
+        if seg_id not in passages_by_id:
+            passages_by_id[seg_id] = {
+                "segment_id": seg_id,
+                "category": category,
+                "passage_key": make_passage_key(category, seg_id),
+                "page_number_pdf": m.get("page_number_pdf"),
+                "page_number_printed": m.get("page_number_printed"),
+                "segment_text": m.get("segment_text", ""),
+                "matches": [],
+            }
+        passages_by_id[seg_id]["matches"].append(m)
+
+    result = []
+    for p in passages_by_id.values():
+        counts = Counter(m.get("matched_text") for m in p["matches"])
+        p["term_counts"] = dict(counts)
+        result.append(p)
+    return result
+
+
+def group_passages_by_status(
+    document_id: str,
+    category: str,
+    passages: list[dict],
+    review_store_data: dict,
+    review_status_filter: str = "all",
+) -> tuple[dict[str, list[dict]], dict[str, int]]:
+    """Group active passages by review status using a loaded review store snapshot."""
+    valid_statuses = ("unreviewed", "relevant", "irrelevant")
+    grouped: dict[str, list[dict]] = {status: [] for status in valid_statuses}
+    reviews_dict = review_store_data.get("reviews", {})
+
+    for p in passages:
+        status, diag = resolve_passage_status(
+            category=category,
+            segment_id=p["segment_id"],
+            constituent_matches=p["matches"],
+            reviews_dict=reviews_dict,
+        )
+        p["review_status"] = status
+        p["review_diagnostics"] = diag
+
+        if review_status_filter == "all" or status == review_status_filter:
+            grouped[status].append(p)
+
+    counts = {
+        "unreviewed": len(grouped["unreviewed"]),
+        "relevant": len(grouped["relevant"]),
+        "irrelevant": len(grouped["irrelevant"]),
+        "reviewed": len(grouped["relevant"]) + len(grouped["irrelevant"]),
+        "total": sum(len(items) for items in grouped.values()),
+    }
+    return grouped, counts
+
