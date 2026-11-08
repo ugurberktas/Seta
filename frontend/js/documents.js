@@ -7,39 +7,65 @@
 import { api } from './api.js';
 import { state, t } from './state.js';
 
+let currentDocFetchToken = 0;
+
 export async function loadDocuments() {
   const docs = await api.get('/api/documents');
-  state.setDocuments(docs);
+  if (state.user) {
+    state.setDocuments(docs);
+  }
   return docs;
 }
 
 export async function loadDocumentDetails(docId) {
-  const detail = await api.get(`/api/documents/${docId}`);
-  state.currentDocument = detail;
-  state.allDocumentsDetail[docId] = detail;
-  state.notify();
-  return detail;
+  const fetchToken = ++currentDocFetchToken;
+  try {
+    const detail = await api.get(`/api/documents/${docId}`);
+    if (!state.user || fetchToken !== currentDocFetchToken || state.selectedDocumentId !== docId) {
+      return null; // Discard stale response
+    }
+    state.currentDocument = detail;
+    state.allDocumentsDetail[docId] = detail;
+    state.notify();
+    return detail;
+  } catch (err) {
+    if (err.name === 'AbortError') return null;
+    if (fetchToken === currentDocFetchToken && state.selectedDocumentId === docId && state.user) {
+      console.error(`Failed to load document details for ${docId}:`, err);
+    }
+    return null;
+  }
 }
 
 export async function loadAllDocumentsForComparison() {
   for (const doc of state.documents) {
+    if (!state.user) return;
     if (!state.allDocumentsDetail[doc.id]) {
       try {
         const detail = await api.get(`/api/documents/${doc.id}`);
+        if (!state.user) return;
         state.allDocumentsDetail[doc.id] = detail;
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.warn(`Could not preload comparison data for ${doc.id}:`, err);
       }
     }
   }
-  state.notify();
+  if (state.user) {
+    state.notify();
+  }
 }
 
 export function renderDocumentOverview(container) {
   if (!container) return;
   const doc = state.currentDocument;
   if (!doc) {
-    container.innerHTML = `<div class="text-muted">${t('loading')}</div>`;
+    container.innerHTML = `
+      <div class="card" style="padding: var(--space-6); text-align: center; color: var(--text-muted);">
+        <span class="spinner" style="margin-bottom: var(--space-2); width: 1.5rem; height: 1.5rem;"></span>
+        <div>${t('loading')}</div>
+      </div>
+    `;
     return;
   }
 
@@ -71,6 +97,7 @@ export function renderDocumentOverview(container) {
       <div class="metric-card">
         <span class="metric-label">${t('total_segments')}</span>
         <span class="metric-value">${doc.total_segments.toLocaleString()}</span>
+        <span class="metric-caption">${t('all_segments_caption')}</span>
       </div>
       <div class="metric-card featured">
         <span class="metric-label">${t('review_progress')}</span>
@@ -101,23 +128,23 @@ export function renderCategoryMetrics(container) {
       <div class="metrics-grid">
         <div class="metric-card featured">
           <span class="metric-label">${t('frequency_metric')}</span>
-          <span class="metric-value primary">${catData.frequency_per_1000_words.toFixed(3)}</span>
+          <span class="metric-value primary">${Number(catData.frequency_per_1000_words).toFixed(6)}</span>
           <span class="metric-caption">${t('frequency_help')}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${t('raw_mentions')}</span>
           <span class="metric-value">${catData.raw_baseline_mentions.toLocaleString()}</span>
-          <span class="metric-caption">Individual term occurrences</span>
+          <span class="metric-caption">${t('raw_mentions_caption')}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${t('passage_hits')}</span>
           <span class="metric-value">${catData.segment_hits.toLocaleString()}</span>
-          <span class="metric-caption">Unique matched passages</span>
+          <span class="metric-caption">${t('passage_hits_caption')}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${t('review_required')}</span>
           <span class="metric-value warning">${catData.review_required_mentions.toLocaleString()}</span>
-          <span class="metric-caption">Matches needing human check</span>
+          <span class="metric-caption">${t('review_required_caption')}</span>
         </div>
       </div>
     </div>
@@ -132,25 +159,31 @@ export function renderHumanVerificationSummary(container, reviewCounts) {
   const irrelevant = reviewCounts.irrelevant || 0;
   const unreviewed = reviewCounts.unreviewed || 0;
 
+  const totalDisplay = state.isLoadingPassages ? '...' : total;
+  const reviewedDisplay = state.isLoadingPassages ? '...' : `${reviewed} / ${total}`;
+  const relevantDisplay = state.isLoadingPassages ? '...' : relevant;
+  const irrelevantDisplay = state.isLoadingPassages ? '...' : irrelevant;
+  const unreviewedDisplay = state.isLoadingPassages ? '...' : unreviewed;
+
   container.innerHTML = `
     <div class="card">
       <h3 class="card-title">${t('human_verification')}</h3>
       <div class="metrics-grid">
         <div class="metric-card featured">
           <span class="metric-label">${t('reviewed_passages')}</span>
-          <span class="metric-value primary">${reviewed} / ${total}</span>
+          <span class="metric-value primary">${reviewedDisplay}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${t('relevant_passages')}</span>
-          <span class="metric-value success">${relevant}</span>
+          <span class="metric-value success">${relevantDisplay}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${t('irrelevant_passages')}</span>
-          <span class="metric-value danger">${irrelevant}</span>
+          <span class="metric-value danger">${irrelevantDisplay}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">${t('unreviewed_passages')}</span>
-          <span class="metric-value neutral">${unreviewed}</span>
+          <span class="metric-value neutral">${unreviewedDisplay}</span>
         </div>
       </div>
     </div>

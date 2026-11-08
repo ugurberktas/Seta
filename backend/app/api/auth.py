@@ -23,7 +23,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/login", response_model=UserResponse, summary="Sign in")
 def login(request: Request, response: Response, payload: LoginRequest) -> UserResponse:
     """Authenticate with username and password, setting an HttpOnly session cookie."""
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
 
     # 1. Enforce rate limit (5 failed attempts per 15 minutes)
     rate_limiter.check_login_rate(client_ip)

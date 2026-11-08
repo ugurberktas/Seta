@@ -8,7 +8,7 @@
  * Zero external libraries. 100% responsive vector graphics.
  */
 
-import { state, t } from './state.js';
+import { getCategoryLabel, state, t } from './state.js';
 
 const CANONICAL_CATEGORIES = ['Russia', 'China', 'Cyber', 'Hybrid', 'Migration'];
 
@@ -86,6 +86,7 @@ export function renderCategoryFrequencyChart(container, docDetail, lang = 'tr') 
 
     const fill = item.isSelected ? '#2563EB' : '#93C5FD';
     const hoverClass = 'chart-interactive-bar';
+    const catLabel = getCategoryLabel(item.name, lang);
 
     barsSvg += `
       <g class="${hoverClass}" data-category="${item.name}" style="cursor: pointer;">
@@ -94,9 +95,9 @@ export function renderCategoryFrequencyChart(container, docDetail, lang = 'tr') 
           ${item.freq.toFixed(3)}
         </text>
         <text x="${x + barW / 2}" y="${padTop + chartH + 18}" font-size="11" font-weight="${item.isSelected ? '700' : '500'}" fill="${item.isSelected ? '#0F172A' : '#475569'}" text-anchor="middle" font-family="sans-serif">
-          ${item.name}
+          ${catLabel}
         </text>
-        <title>${item.name}: ${item.freq.toFixed(3)} / 1,000 words (${item.raw} mentions)</title>
+        <title>${catLabel}: ${Number(item.freq).toFixed(6)} / 1,000 ${lang === 'tr' ? 'kelime' : 'words'} (${item.raw} ${lang === 'tr' ? 'bahsetme' : 'mentions'})</title>
       </g>
     `;
   });
@@ -121,7 +122,7 @@ export function renderCategoryFrequencyChart(container, docDetail, lang = 'tr') 
     group.addEventListener('click', () => {
       const cat = group.getAttribute('data-category');
       if (cat && cat !== state.selectedCategory) {
-        state.selectCategory(cat);
+        window.dispatchEvent(new CustomEvent('sra:select-category', { detail: cat }));
       }
     });
   });
@@ -191,6 +192,8 @@ export function renderCrossDocumentChart(container, allDocsMap, category, lang =
   const slotW = chartW / numBars;
   const barW = Math.min(68, slotW * 0.6);
 
+  const catLabel = getCategoryLabel(category, lang);
+
   let barsSvg = '';
   comparisonData.forEach((item, idx) => {
     const barH = ceiling > 0 ? (item.freq / ceiling) * chartH : 0;
@@ -209,7 +212,7 @@ export function renderCrossDocumentChart(container, allDocsMap, category, lang =
         <text x="${x + barW / 2}" y="${padTop + chartH + 18}" font-size="11" font-weight="${item.isSelected ? '700' : '500'}" fill="${item.isSelected ? '#0F172A' : '#475569'}" text-anchor="middle" font-family="sans-serif">
           ${item.country}
         </text>
-        <title>${item.country} - ${category}: ${item.freq.toFixed(3)} / 1,000 words (${item.raw} mentions)</title>
+        <title>${item.country} - ${catLabel}: ${Number(item.freq).toFixed(6)} / 1,000 ${lang === 'tr' ? 'kelime' : 'words'} (${item.raw} ${lang === 'tr' ? 'bahsetme' : 'mentions'})</title>
       </g>
     `;
   });
@@ -217,7 +220,7 @@ export function renderCrossDocumentChart(container, allDocsMap, category, lang =
   el.innerHTML = `
     <div class="card" style="margin-top: var(--space-6);">
       <div class="card-header" style="display: flex; justify-content: space-between; align-items: baseline;">
-        <h3 class="card-title">${t('cross_doc_title')} (${category})</h3>
+        <h3 class="card-title">${t('cross_doc_title')} (${catLabel})</h3>
         <span class="text-xs text-muted">${t('cross_doc_subtitle')}</span>
       </div>
       <div class="chart-box">
@@ -234,7 +237,7 @@ export function renderCrossDocumentChart(container, allDocsMap, category, lang =
     group.addEventListener('click', () => {
       const docId = group.getAttribute('data-docid');
       if (docId && docId !== state.selectedDocumentId) {
-        state.selectDocument(docId);
+        window.dispatchEvent(new CustomEvent('sra:select-document', { detail: docId }));
       }
     });
   });

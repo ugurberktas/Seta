@@ -41,6 +41,9 @@ class ApiClient {
     try {
       response = await fetch(url, config);
     } catch (err) {
+      if (err.name === 'AbortError') {
+        throw err;
+      }
       console.error(`Network error connecting to ${url}:`, err);
       throw new Error('Unable to connect to the server. Please check your network connection.');
     }

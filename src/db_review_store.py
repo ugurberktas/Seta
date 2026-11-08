@@ -2,7 +2,7 @@
 db_review_store.py
 ------------------
 PostgreSQL storage adapter for passage-level review decisions.
-Used in cloud deployment (e.g. Streamlit Community Cloud) when DATABASE_URL is configured.
+Used in cloud deployment (e.g. Neon PostgreSQL) when DATABASE_URL is configured.
 
 Review unit: (document_id, category, segment_id)
 Table: review_decisions

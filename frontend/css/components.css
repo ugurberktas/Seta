@@ -7,6 +7,15 @@
   box-shadow: var(--shadow-sm);
 }
 
+.card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
 .card-title {
   font-size: 1.1rem;
   font-weight: 700;
@@ -14,6 +23,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 /* Metric Cards Grid */
@@ -30,6 +41,8 @@
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .metric-card.featured {
@@ -113,6 +126,8 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
 
@@ -198,6 +213,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .passage-card:hover {
@@ -263,6 +281,8 @@
   padding: 0.15rem 0.4rem;
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .passage-actions {
@@ -314,6 +334,7 @@
 .tech-table th, .tech-table td {
   padding: 0.35rem 0.5rem;
   border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
 }
 
 .tech-table th {

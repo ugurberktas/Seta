@@ -15,6 +15,29 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PROCESSED_DATA_DIR = REPO_ROOT / "data" / "processed"
 
 
+def _load_env_file() -> None:
+    """Load key-value pairs from .env into os.environ if not already set."""
+    env_file = REPO_ROOT / ".env"
+    if not env_file.is_file():
+        return
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+
+_load_env_file()
+
+
 class Settings:
     PROJECT_NAME: str = "Security Research Assistant API"
     VERSION: str = "1.0.0"
@@ -68,6 +91,7 @@ class Settings:
     COOKIE_MAX_AGE: int = 14 * 24 * 3600  # 14 days
     COOKIE_SECURE: bool = (
         os.environ.get("ENVIRONMENT", os.environ.get("ENV", "development")).lower() == "production"
+        or os.environ.get("RENDER", "").lower() == "true"
     )
     COOKIE_SAMESITE: str = "lax"
 

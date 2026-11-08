@@ -189,7 +189,7 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser. In local de
 
 ## Testing & Quality Assurance
 
-Run the comprehensive automated test suite (125 tests):
+Run the comprehensive automated test suite (150 tests):
 
 ```bash
 pytest -v

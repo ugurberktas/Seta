@@ -7,7 +7,10 @@ All endpoints require authentication.
 
 from __future__ import annotations
 
+import logging
 from fastapi import APIRouter, HTTPException, status
+
+logger = logging.getLogger("sra_reviews")
 
 from backend.app.core.rate_limit import rate_limiter
 from backend.app.core.security import CurrentUser
@@ -44,9 +47,10 @@ def get_document_reviews(document_id: str, user: CurrentUser) -> DocumentReviews
             reviews=reviews_dict,
         )
     except ReviewServiceError as exc:
+        logger.error("Failed to load reviews for document %s: %s", document_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Review storage service unavailable: {exc}",
+            detail="Review storage service unavailable. Please try again later.",
         ) from exc
 
 
@@ -98,9 +102,10 @@ def set_passage_review(
             detail=str(exc),
         ) from exc
     except ReviewServiceError as exc:
+        logger.error("Failed to load reviews for document %s: %s", document_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Review storage service unavailable: {exc}",
+            detail="Review storage service unavailable. Please try again later.",
         ) from exc
 
 
@@ -143,9 +148,10 @@ def clear_passage_review(
             segment_id=segment_id.strip(),
         )
     except ReviewServiceError as exc:
+        logger.error("Failed to load reviews for document %s: %s", document_id, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Review storage service unavailable: {exc}",
+            detail="Review storage service unavailable. Please try again later.",
         ) from exc
 
 

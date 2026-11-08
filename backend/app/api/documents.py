@@ -82,7 +82,7 @@ def get_passages(
         show_review_only=show_review_only,
         include_review_only=include_review_only,
     )
-    if not passages:
+    if passages is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Passages not found for document '{document_id}' and category '{category}'.",

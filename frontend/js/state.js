@@ -18,16 +18,16 @@ export const TRANSLATIONS = {
     category_label: "Kategori",
     filters_label: "Filtreler",
     show_review_required: "Yalnızca inceleme gerektirenler",
-    include_review_only: "Yalnızca inceleme amaçlı eşleşmeleri dahil et",
+    include_review_only: "İnceleme amaçlı eşleşmeleri dahil et",
     analysed_words: "İncelenen Kelimeler",
-    total_matches: "Toplam Eşleşme",
+    total_matches: "Belgedeki Toplam Eşleşme",
     total_segments: "Toplam Segment",
     review_progress: "İnceleme İlerlemesi",
     reviewed_suffix: "incelendi",
     frequency_metric: "1.000 Kelime Başına Sıklık",
     raw_mentions: "Ham Bahsetme Sayısı",
     passage_hits: "Pasaj Eşleşmeleri",
-    review_required: "İnceleme Gerekli",
+    review_required: "İnceleme Gerektiren Eşleşmeler",
     frequency_help: "Analiz edilen her 1.000 kelimedeki bahsetme sıklığıdır; tehdit şiddetini göstermez.",
     human_verification: "İnsan Doğrulaması",
     reviewed_passages: "İncelenen Pasajlar",
@@ -57,6 +57,23 @@ export const TRANSLATIONS = {
     loading: "Yükleniyor...",
     no_passages_match: "Geçerli filtrelerle eşleşen kaynak pasaj bulunamadı.",
     rate_limit_warning: "Çok fazla işlem yapıldı. Lütfen biraz bekleyin.",
+    invalid_credentials: "Geçersiz kullanıcı adı veya şifre.",
+    session_expired: "Oturum süresi doldu. Lütfen tekrar giriş yapın.",
+    raw_mentions_caption: "Tekil anahtar kelime geçişleri",
+    passage_hits_caption: "Eşleşen benzersiz pasajlar",
+    review_required_caption: "İnsan kontrolü gerektiren eşleşmeler",
+    all_segments_caption: "Analiz edilen tüm segmentler",
+    unique_passages_suffix: "benzersiz pasaj",
+    card_close: "▲ Kapat",
+    card_inspect: "▼ İncele",
+    pattern_label: "Desen",
+    matched_term_label: "Eşleşen Terim",
+    offsets_label: "Karakter Aralığı",
+    req_review_label: "İnceleme Gerekli",
+    raw_baseline_label: "Ham Temel",
+    matches_count_suffix: "eşleşme",
+    yes: "Evet",
+    no: "Hayır",
   },
   en: {
     app_title: "Security Research Assistant",
@@ -73,14 +90,14 @@ export const TRANSLATIONS = {
     show_review_required: "Review-required only",
     include_review_only: "Include review-only matches",
     analysed_words: "Analysed Words",
-    total_matches: "Total Matches",
+    total_matches: "Total document matches",
     total_segments: "Total Segments",
     review_progress: "Review Progress",
     reviewed_suffix: "reviewed",
     frequency_metric: "Frequency / 1,000 words",
     raw_mentions: "Raw Mentions",
     passage_hits: "Passage Hits",
-    review_required: "Review-Required",
+    review_required: "Review-required matches",
     frequency_help: "Mention frequency per 1,000 analysed words; it is not a measure of threat severity.",
     human_verification: "Human Verification",
     reviewed_passages: "Reviewed Passages",
@@ -110,8 +127,47 @@ export const TRANSLATIONS = {
     loading: "Loading...",
     no_passages_match: "No source passages match current filters.",
     rate_limit_warning: "Too many requests. Please wait a moment.",
+    invalid_credentials: "Invalid username or password.",
+    session_expired: "Session expired. Please sign in again.",
+    raw_mentions_caption: "Individual term occurrences",
+    passage_hits_caption: "Unique matched passages",
+    review_required_caption: "Matches needing human check",
+    all_segments_caption: "All analysis segments",
+    unique_passages_suffix: "unique passages",
+    card_close: "▲ Close",
+    card_inspect: "▼ Inspect",
+    pattern_label: "Pattern",
+    matched_term_label: "Matched Term",
+    offsets_label: "Offsets",
+    req_review_label: "Req. Review",
+    raw_baseline_label: "Raw Baseline",
+    matches_count_suffix: "matches",
+    yes: "Yes",
+    no: "No",
   },
 };
+
+export const CATEGORY_LABELS = {
+  tr: {
+    Russia: "Rusya",
+    China: "Çin",
+    Cyber: "Siber",
+    Hybrid: "Hibrit",
+    Migration: "Göç",
+  },
+  en: {
+    Russia: "Russia",
+    China: "China",
+    Cyber: "Cyber",
+    Hybrid: "Hybrid",
+    Migration: "Migration",
+  },
+};
+
+export function getCategoryLabel(category, lang = state.language) {
+  const dict = CATEGORY_LABELS[lang] || CATEGORY_LABELS.en;
+  return dict[category] || category;
+}
 
 export const state = {
   user: null,
@@ -123,6 +179,7 @@ export const state = {
   selectedCategory: 'Russia',
   passages: [],
   reviews: {},
+  isLoadingPassages: false,
   filters: {
     showReviewOnly: false,
     includeReviewOnly: false,
@@ -171,6 +228,10 @@ export const state = {
   selectDocument(docId) {
     if (this.selectedDocumentId !== docId) {
       this.selectedDocumentId = docId;
+      this.currentDocument = null;
+      this.passages = [];
+      this.reviews = {};
+      this.isLoadingPassages = true;
       this.activePassageKey = null;
       this.technicalOpenKeys.clear();
       this.pagination = { unreviewed: 1, relevant: 1, irrelevant: 1 };
@@ -181,6 +242,8 @@ export const state = {
   selectCategory(category) {
     if (this.selectedCategory !== category) {
       this.selectedCategory = category;
+      this.passages = [];
+      this.isLoadingPassages = true;
       this.activePassageKey = null;
       this.technicalOpenKeys.clear();
       this.pagination = { unreviewed: 1, relevant: 1, irrelevant: 1 };
@@ -190,6 +253,8 @@ export const state = {
 
   setFilters(filters) {
     this.filters = { ...this.filters, ...filters };
+    this.passages = [];
+    this.isLoadingPassages = true;
     this.activePassageKey = null;
     this.pagination = { unreviewed: 1, relevant: 1, irrelevant: 1 };
     this.notify();
@@ -197,6 +262,7 @@ export const state = {
 
   setPagination(status, page) {
     this.pagination[status] = page;
+    this.activePassageKey = null;
     this.notify();
   },
 
@@ -238,6 +304,11 @@ export const state = {
     this.currentDocument = null;
     this.passages = [];
     this.reviews = {};
+    this.filters = {
+      showReviewOnly: false,
+      includeReviewOnly: false,
+    };
+    this.isLoadingPassages = false;
     this.activePassageKey = null;
     this.technicalOpenKeys.clear();
     this.pendingReviewKeys.clear();

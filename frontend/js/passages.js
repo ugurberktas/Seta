@@ -17,34 +17,42 @@ export async function loadPassagesAndReviews() {
   const cat = state.selectedCategory;
   const { showReviewOnly, includeReviewOnly } = state.filters;
 
+  state.isLoadingPassages = true;
+
   try {
     // 1. Fetch passages from backend (already grouped by segment_id)
     const passagesRes = await api.get(
       `/api/documents/${docId}/categories/${cat}/passages?show_review_only=${showReviewOnly}&include_review_only=${includeReviewOnly}`
     );
-    if (fetchToken !== currentFetchToken || state.selectedDocumentId !== docId || state.selectedCategory !== cat) {
-      return; // Stale async response discarded
+    if (!state.user || fetchToken !== currentFetchToken || state.selectedDocumentId !== docId || state.selectedCategory !== cat) {
+      return; // Stale async response discarded or user logged out
     }
     state.passages = passagesRes.passages || [];
 
     // 2. Fetch existing review decisions from PostgreSQL
     try {
       const reviewsRes = await api.get(`/api/reviews/${docId}`);
-      if (fetchToken !== currentFetchToken || state.selectedDocumentId !== docId) {
-        return; // Stale async response discarded
+      if (!state.user || fetchToken !== currentFetchToken || state.selectedDocumentId !== docId) {
+        return; // Stale async response discarded or user logged out
       }
       state.reviews = reviewsRes.reviews || {};
     } catch (err) {
+      if (err.name === 'AbortError' || !state.user) return;
       console.warn('Could not load reviews from backend:', err);
       state.reviews = {};
     }
-
-    state.notify();
   } catch (err) {
+    if (err.name === 'AbortError' || !state.user) return;
     if (fetchToken === currentFetchToken) {
       console.error('Failed to load passages:', err);
       state.passages = [];
-      state.notify();
+    }
+  } finally {
+    if (fetchToken === currentFetchToken) {
+      state.isLoadingPassages = false;
+      if (state.user) {
+        state.notify();
+      }
     }
   }
 }
@@ -75,6 +83,22 @@ export function groupPassagesByStatus() {
 export function renderPassagesBoard(container) {
   if (!container) return;
 
+  if (state.isLoadingPassages) {
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-title">
+          <span>${t('source_passages')}</span>
+          <span class="text-xs text-muted font-mono">${t('loading')}</span>
+        </div>
+        <div style="padding: var(--space-8); text-align: center; color: var(--text-muted);">
+          <span class="spinner" style="margin-bottom: var(--space-2); width: 1.5rem; height: 1.5rem;"></span>
+          <div>${t('loading')}</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
   const grouped = groupPassagesByStatus();
   const reviewCounts = {
     total: state.passages.length,
@@ -85,7 +109,7 @@ export function renderPassagesBoard(container) {
   };
 
   // Update summary headers
-  const summaryContainer = document.getElementById('human-verification-summary');
+  const summaryContainer = document.getElementById('human-verification-container');
   renderHumanVerificationSummary(summaryContainer, reviewCounts);
   const docOverviewContainer = document.getElementById('document-overview-container');
   renderDocumentOverview(docOverviewContainer);
@@ -100,9 +124,8 @@ export function renderPassagesBoard(container) {
     <div class="card">
       <div class="card-title">
         <span>${t('source_passages')}</span>
-        <span class="text-xs text-muted font-mono">${reviewCounts.total} unique passages</span>
+        <span class="text-xs text-muted font-mono">${reviewCounts.total} ${t('unique_passages_suffix')}</span>
       </div>
-      <div id="board-alert" class="hidden"></div>
       <div class="board-grid">
         ${columnsConfig.map(col => renderColumnHtml(col, grouped[col.status])).join('')}
       </div>
@@ -188,15 +211,15 @@ function renderPassageCardHtml(passage, currentStatus) {
         <td class="font-mono">${escapeHtml(m.pattern_id || m.pattern || '—')}</td>
         <td style="font-weight: 600;">${escapeHtml(m.matched_text || m.term || '—')}</td>
         <td class="font-mono">${m.char_start || 0}–${m.char_end || 0}</td>
-        <td>${m.requires_review ? 'Yes' : 'No'}</td>
-        <td>${m.count_in_raw_baseline ? 'Yes' : 'No'}</td>
+        <td>${m.requires_review ? t('yes') : t('no')}</td>
+        <td>${m.count_in_raw_baseline ? t('yes') : t('no')}</td>
       </tr>
     `).join('');
 
     techDetailsHtml = `
       <div style="margin-top: 0.5rem; border-top: 1px dashed var(--border-light); padding-top: 0.5rem;">
         <button class="tech-details-toggle" data-action="toggle-tech" data-key="${passageKey}">
-          ${isTechOpen ? '▾' : '▸'} ${t('technical_details')} (${passage.matches.length} matches)
+          ${isTechOpen ? '▾' : '▸'} ${t('technical_details')} (${passage.matches.length} ${t('matches_count_suffix')})
         </button>
         ${isTechOpen ? `
           <div class="tech-details-table-wrap">
@@ -204,11 +227,11 @@ function renderPassageCardHtml(passage, currentStatus) {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Pattern</th>
-                  <th>Matched Term</th>
-                  <th>Offsets</th>
-                  <th>Req. Review</th>
-                  <th>Raw Baseline</th>
+                  <th>${t('pattern_label')}</th>
+                  <th>${t('matched_term_label')}</th>
+                  <th>${t('offsets_label')}</th>
+                  <th>${t('req_review_label')}</th>
+                  <th>${t('raw_baseline_label')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,8 +268,8 @@ function renderPassageCardHtml(passage, currentStatus) {
           ${printedPageBadge}
           ${requiresReview}
         </div>
-        <button class="btn-tertiary text-xs" data-action="toggle-expand" data-key="${passageKey}">
-          ${isExpanded ? '▲ Kapat / Close' : '▼ İncele / Inspect'}
+        <button class="btn-tertiary text-xs" data-action="toggle-expand" data-key="${passageKey}" aria-expanded="${isExpanded}">
+          ${isExpanded ? t('card_close') : t('card_inspect')}
         </button>
       </div>
 
@@ -327,20 +350,23 @@ async function executeReviewDecision(category, segmentId, decision, container) {
   try {
     if (decision === 'clear') {
       await api.delete(`/api/reviews/${docId}/${category}/${segmentId}`);
-      if (state.activePassageKey === passageKey) {
-        state.activePassageKey = null;
-      }
-      state.updateReviewDecision(category, segmentId, 'unreviewed');
     } else {
       await api.put(`/api/reviews/${docId}/${category}/${segmentId}`, {
         status: decision,
       });
-      if (state.activePassageKey === passageKey) {
-        state.activePassageKey = null;
-      }
-      state.updateReviewDecision(category, segmentId, decision);
     }
+
+    // Guard against document switch or logout during in-flight network mutation
+    if (!state.user || state.selectedDocumentId !== docId) {
+      return; // Stale mutation response discarded to prevent cross-document state pollution
+    }
+
+    if (state.activePassageKey === passageKey) {
+      state.activePassageKey = null;
+    }
+    state.updateReviewDecision(category, segmentId, decision === 'clear' ? 'unreviewed' : decision);
   } catch (err) {
+    if (err.name === 'AbortError' || !state.user) return; // User aborted or session expired
     console.error('Review mutation failed:', err);
     if (alertEl) {
       alertEl.className = 'alert alert-warning';
@@ -350,15 +376,8 @@ async function executeReviewDecision(category, segmentId, decision, container) {
     }
   } finally {
     state.pendingReviewKeys.delete(passageKey);
-    renderPassagesBoard(container);
-  }
-}
-    console.error('Review mutation failed:', err);
-    if (alertEl) {
-      alertEl.className = 'alert alert-warning';
-      alertEl.textContent = err.message || t('rate_limit_warning');
-      alertEl.classList.remove('hidden');
-      setTimeout(() => alertEl.classList.add('hidden'), 5000);
+    if (state.user && state.selectedDocumentId === docId) {
+      renderPassagesBoard(container);
     }
   }
 }

@@ -53,7 +53,7 @@
           />
         </div>
 
-        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">
+        <button type="submit" id="login-submit-btn" class="btn btn-primary auth-submit-btn">
           Giriş Yap / Sign In
         </button>
       </form>
@@ -78,8 +78,18 @@
 
       <!-- Language Switch -->
       <div class="sidebar-section">
-        <label class="sidebar-section-title" for="language-select" data-i18n="language_label">Dil / Language</label>
-        <select id="language-select" class="form-control">
+        <label class="sidebar-section-title" id="language-label" data-i18n="language_label">Dil / Language</label>
+        <div class="lang-switch-container" role="radiogroup" aria-labelledby="language-label">
+          <div class="lang-switch-slider" id="lang-slider"></div>
+          <button type="button" class="lang-switch-btn active" data-lang="tr" id="lang-btn-tr" role="radio" aria-checked="true">
+            <span class="lang-flag">🇹🇷</span> <span>Türkçe</span>
+          </button>
+          <button type="button" class="lang-switch-btn" data-lang="en" id="lang-btn-en" role="radio" aria-checked="false">
+            <span class="lang-flag">🇬🇧</span> <span>English</span>
+          </button>
+        </div>
+        <!-- Hidden select preserved for test compatibility & form fallback -->
+        <select id="language-select" class="visually-hidden" aria-hidden="true" tabindex="-1">
           <option value="tr">Türkçe (TR)</option>
           <option value="en">English (EN)</option>
         </select>
@@ -87,22 +97,64 @@
 
       <!-- Document Select -->
       <div class="sidebar-section">
-        <label class="sidebar-section-title" for="document-select" data-i18n="document_label">Belge</label>
-        <select id="document-select" class="form-control">
-          <!-- Populated dynamically via API -->
-        </select>
+        <label class="sidebar-section-title" id="document-label" data-i18n="document_label">Belge</label>
+        <div class="custom-dropdown" id="document-dropdown">
+          <button type="button" class="custom-dropdown-trigger" id="document-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+            <span class="custom-dropdown-icon" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+            </span>
+            <span class="custom-dropdown-label" id="document-dropdown-label">Seçiniz...</span>
+            <span class="custom-dropdown-arrow" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+          </button>
+          <ul class="custom-dropdown-menu" id="document-dropdown-menu" role="listbox" aria-labelledby="document-label">
+            <!-- Populated dynamically via JS -->
+          </ul>
+          <!-- Native select kept visually-hidden for test compatibility & form fallback -->
+          <select id="document-select" class="visually-hidden" aria-hidden="true" tabindex="-1">
+            <!-- Populated dynamically via API -->
+          </select>
+        </div>
       </div>
 
       <!-- Category Select -->
       <div class="sidebar-section">
-        <label class="sidebar-section-title" for="category-select" data-i18n="category_label">Kategori</label>
-        <select id="category-select" class="form-control">
-          <option value="Russia">Russia</option>
-          <option value="China">China</option>
-          <option value="Cyber">Cyber</option>
-          <option value="Hybrid">Hybrid</option>
-          <option value="Migration">Migration</option>
-        </select>
+        <label class="sidebar-section-title" id="category-label" data-i18n="category_label">Kategori</label>
+        <div class="custom-dropdown" id="category-dropdown">
+          <button type="button" class="custom-dropdown-trigger" id="category-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+            <span class="custom-dropdown-icon" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                <line x1="4" y1="22" x2="4" y2="15"></line>
+              </svg>
+            </span>
+            <span class="custom-dropdown-label" id="category-dropdown-label">Russia</span>
+            <span class="custom-dropdown-arrow" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </span>
+          </button>
+          <ul class="custom-dropdown-menu" id="category-dropdown-menu" role="listbox" aria-labelledby="category-label">
+            <!-- Populated dynamically via JS -->
+          </ul>
+          <!-- Native select kept visually-hidden for test compatibility & form fallback -->
+          <select id="category-select" class="visually-hidden" aria-hidden="true" tabindex="-1">
+            <option value="Russia">Russia</option>
+            <option value="China">China</option>
+            <option value="Cyber">Cyber</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Migration">Migration</option>
+          </select>
+        </div>
       </div>
 
       <!-- Filters -->
@@ -111,11 +163,21 @@
         <div class="sidebar-checkbox-group">
           <label class="checkbox-label" for="filter-review-only">
             <input type="checkbox" id="filter-review-only" />
+            <span class="custom-checkbox-box" aria-hidden="true">
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 3.5 6.5 9 1"></polyline>
+              </svg>
+            </span>
             <span data-i18n="show_review_required">Yalnızca inceleme gerektirenler</span>
           </label>
           <label class="checkbox-label" for="filter-include-baseline">
             <input type="checkbox" id="filter-include-baseline" />
-            <span data-i18n="include_review_only">Yalnızca inceleme amaçlıları dahil et</span>
+            <span class="custom-checkbox-box" aria-hidden="true">
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 3.5 6.5 9 1"></polyline>
+              </svg>
+            </span>
+            <span data-i18n="include_review_only">İnceleme amaçlı eşleşmeleri dahil et</span>
           </label>
         </div>
       </div>
@@ -130,7 +192,7 @@
           <span data-i18n="logged_in_as">Giriş yapan:</span>
           <strong id="current-user-name" style="color: #FFFFFF;"></strong>
         </div>
-        <button id="logout-btn" class="btn btn-secondary btn-sm" data-i18n="sign_out" style="width: 100%;">
+        <button id="logout-btn" class="btn btn-secondary btn-sm sidebar-logout-btn" data-i18n="sign_out">
           Çıkış Yap
         </button>
       </div>

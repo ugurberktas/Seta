@@ -306,8 +306,9 @@ def test_invalid_status_handling():
     assert diag["source"] == "invalid_status"
 
 
-def test_review_directory_isolation(tmp_path):
+def test_review_directory_isolation(tmp_path, monkeypatch):
     """Verify that custom reviews directory completely isolates file reads and writes."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     custom_dir = tmp_path / "custom_reviews"
     set_reviews_dir(custom_dir)
 
