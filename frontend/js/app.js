@@ -71,6 +71,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     showAppView();
     await initAppData();
   } else {
+    if (loginAlert) {
+      loginAlert.textContent = '';
+      loginAlert.classList.add('hidden');
+    }
     showAuthView();
   }
 });
@@ -108,12 +112,18 @@ function initDomReferences() {
 
   // Handle session expiration cleanly by redirecting to login view
   api.setUnauthorizedHandler(() => {
+    const wasAuthenticated = Boolean(state.user);
     state.resetOnLogout();
     if (loginForm) loginForm.reset();
     showAuthView();
     if (loginAlert) {
-      loginAlert.textContent = t('session_expired');
-      loginAlert.classList.remove('hidden');
+      if (wasAuthenticated) {
+        loginAlert.textContent = t('session_expired');
+        loginAlert.classList.remove('hidden');
+      } else {
+        loginAlert.textContent = '';
+        loginAlert.classList.add('hidden');
+      }
     }
   });
 }

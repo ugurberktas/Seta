@@ -104,3 +104,18 @@ def test_japan_russia_passage_semantics_in_api(monkeypatch):
     segment_ids = [p["segment_id"] for p in data["passages"]]
     assert len(segment_ids) == len(set(segment_ids)) == 269
 
+
+def test_initial_login_no_session_expired_warning():
+    """Verify that initial unauthenticated visits do not trigger session-expired alert."""
+    index_html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'id="login-alert" class="alert alert-danger hidden"' in index_html
+
+    api_js = (FRONTEND_DIR / "js" / "api.js").read_text(encoding="utf-8")
+    assert "endpoint.includes('/auth/me')" in api_js
+    assert "endpoint.includes('/auth/login')" in api_js
+    assert "endpoint.includes('/auth/logout')" in api_js
+
+    app_js = (FRONTEND_DIR / "js" / "app.js").read_text(encoding="utf-8")
+    assert "wasAuthenticated" in app_js
+
+

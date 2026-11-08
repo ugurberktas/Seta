@@ -50,7 +50,10 @@ class ApiClient {
 
     // Handle 401 Unauthorized
     if (response.status === 401) {
-      if (this.onUnauthorized && !endpoint.includes('/auth/login')) {
+      const isAuthEndpoint = endpoint.includes('/auth/login') ||
+                             endpoint.includes('/auth/me') ||
+                             endpoint.includes('/auth/logout');
+      if (this.onUnauthorized && !isAuthEndpoint) {
         this.onUnauthorized();
       }
       const data = await this._parseJson(response);
