@@ -119,3 +119,16 @@ def test_initial_login_no_session_expired_warning():
     assert "wasAuthenticated" in app_js
 
 
+def test_passage_toggle_button_layout_styling():
+    """Verify that passage inspect action is protected from vertical shrinking/wrapping."""
+    passages_js = (FRONTEND_DIR / "js" / "passages.js").read_text(encoding="utf-8")
+    assert 'passage-toggle-btn' in passages_js
+
+    components_css = (FRONTEND_DIR / "css" / "components.css").read_text(encoding="utf-8")
+    assert '.passage-toggle-btn' in components_css
+    assert 'white-space: nowrap;' in components_css
+    assert 'flex-shrink: 0;' in components_css
+    assert 'flex-wrap: wrap;' in components_css
+
+
+

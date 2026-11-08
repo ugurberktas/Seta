@@ -230,18 +230,42 @@
 
 .passage-card-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .passage-page-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-muted);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.passage-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  width: fit-content;
+  min-width: fit-content;
+  margin-left: auto;
+  align-self: flex-start;
+  padding: 0.15rem 0.45rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.passage-toggle-btn:hover {
+  color: var(--color-primary);
 }
 
 .passage-snippet {

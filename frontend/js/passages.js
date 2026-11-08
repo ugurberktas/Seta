@@ -268,7 +268,7 @@ function renderPassageCardHtml(passage, currentStatus) {
           ${printedPageBadge}
           ${requiresReview}
         </div>
-        <button class="btn-tertiary text-xs" data-action="toggle-expand" data-key="${passageKey}" aria-expanded="${isExpanded}">
+        <button class="btn-tertiary text-xs passage-toggle-btn" data-action="toggle-expand" data-key="${passageKey}" aria-expanded="${isExpanded}">
           ${isExpanded ? t('card_close') : t('card_inspect')}
         </button>
       </div>
